@@ -1,4 +1,5 @@
 #include "dragon.h"
+#include "savestate.h"
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -285,6 +286,7 @@ static void usage(const char *prog)
     fprintf(stderr, "Usage: %s [options]\n", prog);
     fprintf(stderr, "  --rom PATH      ROM file (default: ROMS/d32.rom)\n");
     fprintf(stderr, "  --cas PATH      Load cassette .cas file\n");
+    fprintf(stderr, "  --load PATH     Load saved state from file\n");
     fprintf(stderr, "  --scale N       Window scale factor (default: 3)\n");
     fprintf(stderr, "  --nosound       Disable audio\n");
     fprintf(stderr, "  --headless N    Run N frames without display then exit\n");
@@ -298,6 +300,7 @@ int main(int argc, char *argv[])
 {
     const char *rom_path  = NULL;
     const char *cas_path  = NULL;
+    const char *load_path = NULL;
     int scale = 3;
     bool enable_sound = true;
     bool debug = false;
@@ -308,6 +311,8 @@ int main(int argc, char *argv[])
             rom_path = argv[++i];
         else if (strcmp(argv[i], "--cas") == 0 && i + 1 < argc)
             cas_path = argv[++i];
+        else if (strcmp(argv[i], "--load") == 0 && i + 1 < argc)
+            load_path = argv[++i];
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc)
             scale = atoi(argv[++i]);
         else if (strcmp(argv[i], "--nosound") == 0)
@@ -333,7 +338,7 @@ int main(int argc, char *argv[])
     Dragon dragon;
     dragon_init(&dragon);
 
-    if (dragon_load_rom(&dragon, rom_path) != 0)
+    if (dragon_load_rom(rom_path) != 0)
         return 1;
 
     dragon_reset(&dragon);
@@ -347,8 +352,15 @@ int main(int argc, char *argv[])
                     cas_path, cassette_get_size(&dragon.cassette));
     }
 
+    if (load_path) {
+        if (savestate_load(&dragon, load_path) != 0)
+            return 1;
+        if (debug)
+            fprintf(stderr, "State loaded: %s\n", load_path);
+    }
+
     if (debug)
-        fprintf(stderr, "Reset vector: $%04X\n", dragon.cpu.pc);
+        fprintf(stderr, "PC: $%04X\n", dragon.cpu.pc);
 
     /* Headless mode: run N frames and exit (for testing) */
     if (headless_frames > 0) {
@@ -449,8 +461,17 @@ int main(int argc, char *argv[])
                 break;
             case SDL_KEYDOWN:
                 if (!event.key.repeat) {
-                    bool shift = (event.key.keysym.mod & KMOD_SHIFT) != 0;
-                    handle_key(&dragon, event.key.keysym.scancode, true, shift);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_F5) {
+                        char savefile[64];
+                        savestate_make_filename(savefile, sizeof(savefile));
+                        if (savestate_save(&dragon, savefile) == 0)
+                            fprintf(stderr, "State saved: %s\n", savefile);
+                        else
+                            fprintf(stderr, "Save state failed!\n");
+                    } else {
+                        bool shift = (event.key.keysym.mod & KMOD_SHIFT) != 0;
+                        handle_key(&dragon, event.key.keysym.scancode, true, shift);
+                    }
                 }
                 break;
             case SDL_KEYUP:
@@ -488,7 +509,6 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        dragon.frame_count++;
 
         /* Update texture from framebuffer */
         const uint32_t *fb = dragon_get_framebuffer(&dragon);

@@ -61,17 +61,17 @@ void dragon_init(Dragon *d);
 /* Load ROM. Returns 0 on success.
  * 16KB ROM loaded at $8000-$BFFF and mirrored to $C000-$FFFF.
  * 32KB ROM fills $8000-$FFFF. */
-int dragon_load_rom(Dragon *d, const char *rom_path);
+int dragon_load_rom(const char *rom_path);
 
 /* Reset the machine (as if pressing the reset button). */
 void dragon_reset(Dragon *d);
 
-/* Run one complete frame (262 scanlines).
+/* Run one complete frame (312 scanlines, PAL).
  * Executes CPU, updates VDG, fires interrupts.
  * Returns total CPU cycles executed this frame. */
 int dragon_run_frame(Dragon *d);
 
-/* Run a single scanline (228 CPU cycles).
+/* Run a single scanline (57 CPU cycles).
  * Returns total CPU cycles executed this scanline. */
 int dragon_run_scanline(Dragon *d);
 

@@ -134,16 +134,19 @@ void dragon_init(Dragon *d)
     d->frame_count = 0;
 }
 
-int dragon_load_rom(Dragon *d, const char *rom_path)
+int dragon_load_rom(const char *rom_path)
 {
-    (void)d;
     /* Single-ROM mode: detect size */
     FILE *f = fopen(rom_path, "rb");
     if (!f) {
         fprintf(stderr, "Failed to open ROM: %s\n", rom_path);
         return -1;
     }
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fprintf(stderr, "Failed to seek in ROM: %s\n", rom_path);
+        fclose(f);
+        return -1;
+    }
     long rom_size = ftell(f);
     fclose(f);
 

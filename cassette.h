@@ -44,7 +44,7 @@ typedef struct {
 
     /* Waveform state for current bit */
     double    halfcycle_len;     /* CPU cycles per half-cycle (fractional) */
-    int       halfcycles_per_bit; /* 2 for both bit types */
+    int       halfcycles_per_bit; /* Always 2 (one full cycle per bit for both 1200/2400 Hz) */
     int       halfcycle_idx;     /* Which half-cycle we're on (0-based) */
     double    cycle_count;       /* Cycles accumulated (fractional) */
     bool      signal_level;  /* Current comparator output */

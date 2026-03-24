@@ -2,4 +2,7 @@ ROMS
 OTHER
 plan.md
 .DS_Store
+*.o
+idris6809
+*.state
 

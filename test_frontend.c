@@ -19,7 +19,7 @@ int main(void)
     /* --- 1: Headless frame execution (same as --headless mode) --- */
     printf("Headless execution:\n");
     dragon_init(&d);
-    int rc = dragon_load_rom(&d, "ROMS/d32.rom");
+    int rc = dragon_load_rom("ROMS/d32.rom");
     CHECK(rc == 0, "ROM load");
     dragon_reset(&d);
 
@@ -45,7 +45,7 @@ int main(void)
     /* --- 2: Keyboard matrix mapping coverage --- */
     printf("\nKeyboard matrix:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set up PIA0 for keyboard scanning */
@@ -147,7 +147,7 @@ int main(void)
     /* --- 3: Audio DAC output --- */
     printf("\nAudio DAC:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set up PIA1 port A for DAC output */
@@ -184,7 +184,7 @@ int main(void)
     /* --- 4: VDG mode update path via PIA1 writes --- */
     printf("\nVDG mode update path:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set PIA1 port B to RG6 mode: A/G=1, GM=111, CSS=0 -> $F0 */
@@ -219,7 +219,7 @@ int main(void)
     /* --- 5: SAM display address via memory writes --- */
     printf("\nSAM display address integration:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set display at $0400: F1=1, all others 0 */
@@ -237,7 +237,7 @@ int main(void)
     /* --- 6: Timing accuracy over multiple frames --- */
     printf("\nTiming accuracy:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     int total = 0;
@@ -258,7 +258,7 @@ int main(void)
     /* --- 7: Reset clears state properly --- */
     printf("\nReset behavior:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Run 5 frames, then reset */

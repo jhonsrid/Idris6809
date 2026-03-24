@@ -53,9 +53,17 @@ int cassette_load(Cassette *cas, const char *path)
         return -1;
     }
 
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fprintf(stderr, "Failed to seek in cassette file: %s\n", path);
+        fclose(f);
+        return -1;
+    }
     long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "Failed to seek in cassette file: %s\n", path);
+        fclose(f);
+        return -1;
+    }
 
     if (size <= 0) {
         fclose(f);
@@ -65,6 +73,7 @@ int cassette_load(Cassette *cas, const char *path)
 
     cas->data = malloc((size_t)size);
     if (!cas->data) {
+        fprintf(stderr, "Failed to allocate %ld bytes for cassette: %s\n", size, path);
         fclose(f);
         return -1;
     }

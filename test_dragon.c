@@ -48,7 +48,7 @@ int main(void)
     /* --- 2: ROM loading and reset --- */
     printf("\nROM loading and reset:\n");
     dragon_init(&d);
-    int rc = dragon_load_rom(&d, "ROMS/d32.rom");
+    int rc = dragon_load_rom("ROMS/d32.rom");
     TEST("ROMs load successfully");
     CHECK(rc == 0, "load failed");
 
@@ -67,7 +67,7 @@ int main(void)
     /* --- 3: I/O dispatch wired correctly --- */
     printf("\nI/O dispatch:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Write to PIA0 CRA via memory, then read it back */
@@ -89,7 +89,7 @@ int main(void)
     /* --- 4: Single scanline execution --- */
     printf("\nScanline execution:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     int cycles = dragon_run_scanline(&d);
@@ -102,7 +102,7 @@ int main(void)
     /* --- 5: Full frame execution --- */
     printf("\nFull frame execution:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     int frame_cycles = dragon_run_frame(&d);
@@ -132,7 +132,7 @@ int main(void)
     /* --- 7: FSYNC interrupt fires --- */
     printf("\nFSYNC interrupt:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Run 192 scanlines (active display) */
@@ -146,7 +146,7 @@ int main(void)
     /* --- 8: Keyboard matrix --- */
     printf("\nKeyboard matrix:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set up PIA0 for keyboard: port A input, port B output */
@@ -205,7 +205,7 @@ int main(void)
     /* --- 9: VDG mode from PIA1 port B --- */
     printf("\nVDG mode via PIA1:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set PIA1 port B: DDR = $F8 (bits 7-3 output), data mode */
@@ -229,7 +229,7 @@ int main(void)
     /* --- 10: Framebuffer access --- */
     printf("\nFramebuffer:\n");
     dragon_init(&d);
-    dragon_load_rom(&d, "ROMS/d32.rom");
+    dragon_load_rom("ROMS/d32.rom");
     dragon_reset(&d);
 
     const uint32_t *fb = dragon_get_framebuffer(&d);

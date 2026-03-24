@@ -7,7 +7,7 @@
 /*
  * MC6847 Video Display Generator
  *
- * Native output: 256x192 active pixels (NTSC: 262 scanlines total).
+ * Native output: 256x192 active pixels (PAL: 312 scanlines total).
  * Modes controlled by external pins from PIA1 port B:
  *   A/G   (bit 7) — 0=alphanumeric, 1=graphics
  *   GM2:1:0 (bits 6-4) — graphics mode select
@@ -18,10 +18,10 @@
  *   Bit 6: inverse video (alpha) / not used (SG4)
  *   Bits 5-0: character code (alpha) or SG4 pattern
  *
- * Timing (NTSC):
- *   262 scanlines/frame, 228 CPU cycles/scanline
- *   Active: 192 scanlines (lines 25-216)
- *   VBlank: 70 scanlines
+ * Timing (PAL):
+ *   312 scanlines/frame, 57 CPU cycles/scanline
+ *   Active: 192 scanlines (lines 0-191)
+ *   VBlank: 120 scanlines
  *   FS (frame sync) asserted at start of vblank
  */
 
@@ -36,18 +36,18 @@
 #define VDG_VBLANK_START         192  /* First vblank line (active lines 0-191) */
 #define VDG_TOP_BORDER           37   /* PAL: (312 - 192) / 2 - some overscan ≈ 37 */
 
-/* Graphics mode encoding (GM2:GM1:GM0 from PIA1 port B bits 6:5:4) */
-typedef enum {
-    VDG_MODE_ALPHA = 0,   /* A/G=0: text / semigraphics */
-    VDG_MODE_CG1   = 0,   /* GM=000, 64x64, 4-color */
-    VDG_MODE_RG1   = 1,   /* GM=001, 128x64, 2-color */
-    VDG_MODE_CG2   = 2,   /* GM=010, 128x64, 4-color */
-    VDG_MODE_RG2   = 3,   /* GM=011, 128x96, 2-color */
-    VDG_MODE_CG3   = 4,   /* GM=100, 128x96, 4-color */
-    VDG_MODE_RG3   = 5,   /* GM=101, 128x192, 2-color */
-    VDG_MODE_CG6   = 6,   /* GM=110, 128x192, 4-color */
-    VDG_MODE_RG6   = 7,   /* GM=111, 256x192, 2-color */
-} vdg_gfx_mode_t;
+/* Graphics mode values (GM2:GM1:GM0 from PIA1 port B bits 6:5:4).
+ * When A/G=0, the GM bits are ignored (alpha/semigraphics mode).
+ * When A/G=1, GM selects the graphics mode:
+ *   0 = CG1  (64x64, 4-color)
+ *   1 = RG1  (128x64, 2-color)
+ *   2 = CG2  (128x64, 4-color)
+ *   3 = RG2  (128x96, 2-color)
+ *   4 = CG3  (128x96, 4-color)
+ *   5 = RG3  (128x192, 2-color)
+ *   6 = CG6  (128x192, 4-color)
+ *   7 = RG6  (256x192, 2-color)
+ */
 
 typedef struct {
     /* Framebuffer: 256x192 pixels, each pixel is an RGB value packed as
@@ -60,7 +60,7 @@ typedef struct {
     bool     css;       /* Color set select */
 
     /* Timing state */
-    int      scanline;  /* Current scanline (0-261) */
+    int      scanline;  /* Current scanline (0-311) */
     bool     fs;        /* Frame sync (true during vblank) */
 
     /* Pointer to RAM (set during init) */
