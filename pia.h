@@ -86,7 +86,7 @@ void pia_set_input_a(PIA *pia, uint8_t val);
 void pia_set_input_b(PIA *pia, uint8_t val);
 
 /*
- * Dragon 64 specific: two PIA instances
+ * Dragon 32: two PIA instances
  *
  * PIA0 ($FF00-$FF03):
  *   Port A: keyboard column inputs (active low) / joystick comparator

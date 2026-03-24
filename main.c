@@ -56,7 +56,7 @@ static void audio_push_sample(int16_t raw)
 /* ================================================================
  * Keyboard mapping: SDL scancode -> Dragon matrix (row, col)
  *
- * Dragon 64 keyboard matrix:
+ * Dragon 32 keyboard matrix:
  *   Row 0: 0 1 2 3 4 5 6 7
  *   Row 1: 8 9 : ; , - . /
  *   Row 2: @ A B C D E F G
@@ -283,9 +283,7 @@ static void handle_key(Dragon *d, SDL_Scancode sc, bool pressed, bool shift)
 static void usage(const char *prog)
 {
     fprintf(stderr, "Usage: %s [options]\n", prog);
-    fprintf(stderr, "  --rom PATH      Single ROM (Dragon 32: 16KB mirrored, or 32KB combined)\n");
-    fprintf(stderr, "  --rom1 PATH     Dragon 64 ROM 1 (default: ROMS/d64_1.rom)\n");
-    fprintf(stderr, "  --rom2 PATH     Dragon 64 ROM 2 (default: ROMS/d64_2.rom)\n");
+    fprintf(stderr, "  --rom PATH      ROM file (default: ROMS/d32.rom)\n");
     fprintf(stderr, "  --cas PATH      Load cassette .cas file\n");
     fprintf(stderr, "  --scale N       Window scale factor (default: 3)\n");
     fprintf(stderr, "  --nosound       Disable audio\n");
@@ -298,9 +296,7 @@ static void usage(const char *prog)
  * ================================================================ */
 int main(int argc, char *argv[])
 {
-    const char *rom_path  = NULL;  /* single ROM (Dragon 32 / combined) */
-    const char *rom1_path = NULL;
-    const char *rom2_path = NULL;
+    const char *rom_path  = NULL;
     const char *cas_path  = NULL;
     int scale = 3;
     bool enable_sound = true;
@@ -312,10 +308,6 @@ int main(int argc, char *argv[])
             rom_path = argv[++i];
         else if (strcmp(argv[i], "--cas") == 0 && i + 1 < argc)
             cas_path = argv[++i];
-        else if (strcmp(argv[i], "--rom1") == 0 && i + 1 < argc)
-            rom1_path = argv[++i];
-        else if (strcmp(argv[i], "--rom2") == 0 && i + 1 < argc)
-            rom2_path = argv[++i];
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc)
             scale = atoi(argv[++i]);
         else if (strcmp(argv[i], "--nosound") == 0)
@@ -330,27 +322,19 @@ int main(int argc, char *argv[])
         }
     }
 
-    /* Default to Dragon 64 ROMs if nothing specified */
-    if (!rom_path && !rom1_path && !rom2_path) {
-        rom1_path = "ROMS/d64_1.rom";
-        rom2_path = "ROMS/d64_2.rom";
-    }
+    /* Default ROM */
+    if (!rom_path)
+        rom_path = "ROMS/d32.rom";
 
     if (scale < 1) scale = 1;
     if (scale > 8) scale = 8;
 
-    /* Initialize machine — single ROM implies Dragon 32 */
-    DragonModel model = rom_path ? DRAGON_32 : DRAGON_64;
+    /* Initialize machine */
     Dragon dragon;
-    dragon_init(&dragon, model);
+    dragon_init(&dragon);
 
-    if (rom_path) {
-        if (dragon_load_roms(&dragon, rom_path, NULL) != 0)
-            return 1;
-    } else {
-        if (dragon_load_roms(&dragon, rom1_path, rom2_path) != 0)
-            return 1;
-    }
+    if (dragon_load_rom(&dragon, rom_path) != 0)
+        return 1;
 
     dragon_reset(&dragon);
     init_key_tracking();
@@ -386,7 +370,7 @@ int main(int argc, char *argv[])
     int win_h = VDG_HEIGHT * scale;
 
     SDL_Window *window = SDL_CreateWindow(
-        "Idris6809 — Dragon 64",
+        "Idris6809 — Dragon 32",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         win_w, win_h,
         SDL_WINDOW_SHOWN

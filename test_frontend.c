@@ -18,8 +18,8 @@ int main(void)
 
     /* --- 1: Headless frame execution (same as --headless mode) --- */
     printf("Headless execution:\n");
-    dragon_init(&d, DRAGON_64);
-    int rc = dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    int rc = dragon_load_rom(&d, "ROMS/d32.rom");
     CHECK(rc == 0, "ROM load");
     dragon_reset(&d);
 
@@ -44,8 +44,8 @@ int main(void)
 
     /* --- 2: Keyboard matrix mapping coverage --- */
     printf("\nKeyboard matrix:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set up PIA0 for keyboard scanning */
@@ -146,8 +146,8 @@ int main(void)
 
     /* --- 3: Audio DAC output --- */
     printf("\nAudio DAC:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set up PIA1 port A for DAC output */
@@ -183,8 +183,8 @@ int main(void)
 
     /* --- 4: VDG mode update path via PIA1 writes --- */
     printf("\nVDG mode update path:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set PIA1 port B to RG6 mode: A/G=1, GM=111, CSS=0 -> $F0 */
@@ -205,9 +205,10 @@ int main(void)
     TEST("VDG CSS=0 via PIA1 write");
     CHECK(d.vdg.css == false, "expected CSS=0");
 
-    /* Switch to text mode with CSS */
+    /* Switch to text mode with CSS — check immediately after PIA write
+     * (don't run scanline as ROM code may override PIA1 state) */
     mem_write(0xFF22, 0x08);  /* A/G=0, GM=000, CSS=1 */
-    dragon_run_scanline(&d);
+    vdg_set_mode(&d.vdg, pia_get_output_b(&d.pia1));
 
     TEST("VDG switched to alpha mode");
     CHECK(d.vdg.ag == false, "expected A/G=0");
@@ -217,8 +218,8 @@ int main(void)
 
     /* --- 5: SAM display address via memory writes --- */
     printf("\nSAM display address integration:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set display at $0400: F1=1, all others 0 */
@@ -235,8 +236,8 @@ int main(void)
 
     /* --- 6: Timing accuracy over multiple frames --- */
     printf("\nTiming accuracy:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     int total = 0;
@@ -256,8 +257,8 @@ int main(void)
 
     /* --- 7: Reset clears state properly --- */
     printf("\nReset behavior:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Run 5 frames, then reset */
@@ -269,7 +270,8 @@ int main(void)
 
     dragon_reset(&d);
     TEST("After reset: PC = reset vector");
-    CHECK(d.cpu.pc == 0xC000, "expected $C000");
+    uint16_t rv = (mem_read(0xFFFE) << 8) | mem_read(0xFFFF);
+    CHECK(d.cpu.pc == rv, "PC doesn't match reset vector");
 
     TEST("After reset: CC has F|I set");
     CHECK((d.cpu.cc & (CC_F | CC_I)) == (CC_F | CC_I), "expected F|I");

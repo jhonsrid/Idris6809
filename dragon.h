@@ -6,14 +6,8 @@
 #include "sam.h"
 #include "vdg.h"
 #include "pia.h"
-#include "acia.h"
 #include "cassette.h"
 #include <stdbool.h>
-
-typedef enum {
-    DRAGON_64,
-    DRAGON_32
-} DragonModel;
 
 /*
  * Dragon machine state — ties all components together.
@@ -45,7 +39,6 @@ typedef struct {
     VDG      vdg;
     PIA      pia0;      /* $FF00-$FF03: keyboard, joystick, HSYNC, FSYNC */
     PIA      pia1;      /* $FF20-$FF23: DAC, sound, cassette, VDG mode */
-    ACIA     acia;      /* $FF04-$FF07: serial port (Dragon 64 only) */
     Cassette cassette;  /* Cassette tape interface */
 
     /* Keyboard matrix: 8 rows × 8 columns.
@@ -58,21 +51,17 @@ typedef struct {
     /* Frame counter */
     int      frame_count;
 
-    /* Machine model */
-    DragonModel model;
-
     /* Running state */
     bool     running;
 } Dragon;
 
-/* Initialize the machine for the given model. Does NOT load ROMs. */
-void dragon_init(Dragon *d, DragonModel model);
+/* Initialize the machine (Dragon 32). Does NOT load ROMs. */
+void dragon_init(Dragon *d);
 
-/* Load ROMs. Returns 0 on success.
- * Two-ROM mode: rom1 at $8000-$BFFF, rom2 at $C000-$FFFF (Dragon 64).
- * Single-ROM mode: pass rom2 as NULL. 16KB ROM loaded at $8000-$BFFF
- * and mirrored to $C000-$FFFF (Dragon 32). 32KB ROM fills both. */
-int dragon_load_roms(Dragon *d, const char *rom1_path, const char *rom2_path);
+/* Load ROM. Returns 0 on success.
+ * 16KB ROM loaded at $8000-$BFFF and mirrored to $C000-$FFFF.
+ * 32KB ROM fills $8000-$FFFF. */
+int dragon_load_rom(Dragon *d, const char *rom_path);
 
 /* Reset the machine (as if pressing the reset button). */
 void dragon_reset(Dragon *d);

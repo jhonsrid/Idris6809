@@ -11,7 +11,7 @@
  *   V2:V1:V0     — VDG display mode / offset select
  *   F6:F5:F4:F3:F2:F1:F0 — Display page address (bits 15-9)
  *   R1:R0        — CPU rate select
- *   P1           — Memory size (always 1 = 64K for Dragon 64)
+ *   P1           — Memory size (always 1 = 64K for Dragon 32)
  *   TY           — Map type (0 = ROM, 1 = all-RAM)
  */
 

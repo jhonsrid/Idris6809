@@ -3,14 +3,13 @@
 #include <string.h>
 
 /*
- * Dragon 64 Memory Map:
+ * Dragon 32 Memory Map:
  *
  * $0000-$7FFF  32KB  RAM (always)
- * $8000-$BFFF  16KB  ROM (d64_1.rom) or RAM (all-RAM mode)
- * $C000-$FEFF  ~16KB ROM (d64_2.rom) or RAM (all-RAM mode)
+ * $8000-$BFFF  16KB  ROM (d32.rom) or RAM (all-RAM mode)
+ * $C000-$FEFF  ~16KB ROM (mirror) or RAM (all-RAM mode)
  * $FF00-$FF03        PIA0
- * $FF04-$FF07        ACIA
- * $FF08-$FF1F        mirrors / unused
+ * $FF04-$FF1F        mirrors / unused
  * $FF20-$FF23        PIA1
  * $FF24-$FFBF        mirrors / unused
  * $FFC0-$FFDF        SAM registers

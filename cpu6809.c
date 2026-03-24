@@ -2285,7 +2285,7 @@ void cpu_init(CPU6809 *cpu)
 {
     memset(cpu, 0, sizeof(*cpu));
     /* S and U default to top of low RAM so JSR before LDS doesn't
-     * wrap into the ROM vector area (Dragon 64 ROM does this). */
+     * wrap into the ROM vector area (Dragon ROM does this). */
     cpu->s = 0x7F00;
     cpu->u = 0x7F00;
 }

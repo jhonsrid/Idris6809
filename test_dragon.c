@@ -14,11 +14,11 @@ int main(void)
 {
     Dragon d;
 
-    printf("=== Dragon 64 Machine Tests ===\n\n");
+    printf("=== Dragon 32 Machine Tests ===\n\n");
 
     /* --- 1: Init --- */
     printf("Initialization:\n");
-    dragon_init(&d, DRAGON_64);
+    dragon_init(&d);
 
     TEST("CPU initialized (PC=0 before reset)");
     CHECK(d.cpu.pc == 0, "expected 0 before ROM load/reset");
@@ -39,16 +39,16 @@ int main(void)
     TEST("PIA0 initialized");
     CHECK(d.pia0.cra == 0x00, "expected CRA=$00");
 
-    TEST("PIA1 port B input has RAM size bit (bit 2=0)");
-    CHECK(d.pia1.irb == 0xFB, "expected $FB");
+    TEST("PIA1 port B input (32K: bit 2=1)");
+    CHECK(d.pia1.irb == 0xFF, "expected $FF");
 
     TEST("Running flag set");
     CHECK(d.running, "expected true");
 
     /* --- 2: ROM loading and reset --- */
     printf("\nROM loading and reset:\n");
-    dragon_init(&d, DRAGON_64);
-    int rc = dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    int rc = dragon_load_rom(&d, "ROMS/d32.rom");
     TEST("ROMs load successfully");
     CHECK(rc == 0, "load failed");
 
@@ -66,8 +66,8 @@ int main(void)
 
     /* --- 3: I/O dispatch wired correctly --- */
     printf("\nI/O dispatch:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Write to PIA0 CRA via memory, then read it back */
@@ -80,10 +80,6 @@ int main(void)
     TEST("PIA1 CRB accessible at $FF23");
     CHECK(mem_read(0xFF23) == 0x04, "expected $04");
 
-    /* ACIA status register */
-    TEST("ACIA status at $FF05 returns $10 (TX empty)");
-    CHECK(mem_read(0xFF05) == 0x10, "expected $10");
-
     /* SAM write: set TY -> all-RAM mode */
     mem_write(0xFFDF, 0x00);
     TEST("SAM TY write at $FFDF switches to RAM mode");
@@ -92,8 +88,8 @@ int main(void)
 
     /* --- 4: Single scanline execution --- */
     printf("\nScanline execution:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     int cycles = dragon_run_scanline(&d);
@@ -105,8 +101,8 @@ int main(void)
 
     /* --- 5: Full frame execution --- */
     printf("\nFull frame execution:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     int frame_cycles = dragon_run_frame(&d);
@@ -135,8 +131,8 @@ int main(void)
 
     /* --- 7: FSYNC interrupt fires --- */
     printf("\nFSYNC interrupt:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Run 192 scanlines (active display) */
@@ -149,8 +145,8 @@ int main(void)
 
     /* --- 8: Keyboard matrix --- */
     printf("\nKeyboard matrix:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set up PIA0 for keyboard: port A input, port B output */
@@ -208,8 +204,8 @@ int main(void)
 
     /* --- 9: VDG mode from PIA1 port B --- */
     printf("\nVDG mode via PIA1:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     /* Set PIA1 port B: DDR = $F8 (bits 7-3 output), data mode */
@@ -232,8 +228,8 @@ int main(void)
 
     /* --- 10: Framebuffer access --- */
     printf("\nFramebuffer:\n");
-    dragon_init(&d, DRAGON_64);
-    dragon_load_roms(&d, "ROMS/d64_1.rom", "ROMS/d64_2.rom");
+    dragon_init(&d);
+    dragon_load_rom(&d, "ROMS/d32.rom");
     dragon_reset(&d);
 
     const uint32_t *fb = dragon_get_framebuffer(&d);

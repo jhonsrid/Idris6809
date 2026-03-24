@@ -57,17 +57,6 @@ static void pia1_write_cb(uint16_t addr, uint8_t val)
     }
 }
 
-/* ACIA at $FF04-$FF07 */
-static uint8_t acia_read_cb(uint16_t addr)
-{
-    return acia_read(&g_dragon->acia, (uint8_t)(addr & 0x03));
-}
-
-static void acia_write_cb(uint16_t addr, uint8_t val)
-{
-    acia_write(&g_dragon->acia, (uint8_t)(addr & 0x03), val);
-}
-
 static void sam_write_cb(uint16_t addr)
 {
     sam_write(&g_dragon->sam, addr);
@@ -116,10 +105,9 @@ static void update_cpu_interrupts(Dragon *d)
  * Public API
  * ================================================================ */
 
-void dragon_init(Dragon *d, DragonModel model)
+void dragon_init(Dragon *d)
 {
     memset(d, 0, sizeof(*d));
-    d->model = model;
     g_dragon = d;
 
     /* Initialize all subsystems */
@@ -128,63 +116,50 @@ void dragon_init(Dragon *d, DragonModel model)
     vdg_init(&d->vdg, mem_get_ram());
     pia_init(&d->pia0);
     pia_init(&d->pia1);
-    acia_init(&d->acia);
     cassette_init(&d->cassette);
     cpu_init(&d->cpu);
 
     /* Register I/O handlers */
     mem_register_sam(sam_write_cb);
     mem_register_io(0xFF00, 4, pia0_read_cb, pia0_write_cb);
-    if (model == DRAGON_64)
-        mem_register_io(0xFF04, 4, acia_read_cb, acia_write_cb);
     mem_register_io(0xFF20, 4, pia1_read_cb, pia1_write_cb);
 
     /* Keyboard: all keys released (active low, so $FF = all up) */
     memset(d->keyboard, 0xFF, sizeof(d->keyboard));
 
-    /* PIA1 port B input: bit 2 indicates RAM size (active low).
-     * Dragon 64: bit 2 = 0 (64K present) → $FB
-     * Dragon 32: bit 2 = 1 (32K only)    → $FF */
-    pia_set_input_b(&d->pia1, (model == DRAGON_64) ? 0xFB : 0xFF);
+    /* PIA1 port B input: bit 2 = 1 (32K RAM) → $FF */
+    pia_set_input_b(&d->pia1, 0xFF);
 
     d->running = true;
     d->frame_count = 0;
 }
 
-int dragon_load_roms(Dragon *d, const char *rom1_path, const char *rom2_path)
+int dragon_load_rom(Dragon *d, const char *rom_path)
 {
     (void)d;
-    if (rom2_path) {
-        /* Two-ROM mode (Dragon 64): rom1=$8000-$BFFF, rom2=$C000-$FFFF */
-        if (mem_load_rom(rom1_path, 0x0000, 0x4000) != 0)
-            return -1;
-        if (mem_load_rom(rom2_path, 0x4000, 0x4000) != 0)
-            return -1;
-    } else {
-        /* Single-ROM mode: detect size */
-        FILE *f = fopen(rom1_path, "rb");
-        if (!f) {
-            fprintf(stderr, "Failed to open ROM: %s\n", rom1_path);
-            return -1;
-        }
-        fseek(f, 0, SEEK_END);
-        long rom_size = ftell(f);
-        fclose(f);
+    /* Single-ROM mode: detect size */
+    FILE *f = fopen(rom_path, "rb");
+    if (!f) {
+        fprintf(stderr, "Failed to open ROM: %s\n", rom_path);
+        return -1;
+    }
+    fseek(f, 0, SEEK_END);
+    long rom_size = ftell(f);
+    fclose(f);
 
-        if (rom_size == 0x8000) {
-            /* 32KB: fills entire ROM buffer ($8000-$FFFF) */
-            if (mem_load_rom(rom1_path, 0x0000, 0x8000) != 0)
-                return -1;
-        } else if (rom_size == 0x4000) {
-            /* 16KB: load at $8000-$BFFF, mirror to $C000-$FFFF */
-            if (mem_load_rom(rom1_path, 0x0000, 0x4000) != 0)
-                return -1;
-            mem_mirror_rom(0x4000, 0x0000, 0x4000);
-        } else {
-            fprintf(stderr, "ROM %s: unexpected size %ld (expected 16384 or 32768)\n",
-                    rom1_path, rom_size);
+    if (rom_size == 0x8000) {
+        /* 32KB: fills entire ROM buffer ($8000-$FFFF) */
+        if (mem_load_rom(rom_path, 0x0000, 0x8000) != 0)
             return -1;
-        }
+    } else if (rom_size == 0x4000) {
+        /* 16KB: load at $8000-$BFFF, mirror to $C000-$FFFF */
+        if (mem_load_rom(rom_path, 0x0000, 0x4000) != 0)
+            return -1;
+        mem_mirror_rom(0x4000, 0x0000, 0x4000);
+    } else {
+        fprintf(stderr, "ROM %s: unexpected size %ld (expected 16384 or 32768)\n",
+                rom_path, rom_size);
+        return -1;
     }
     return 0;
 }
@@ -195,8 +170,7 @@ void dragon_reset(Dragon *d)
     sam_init(&d->sam);
     pia_init(&d->pia0);
     pia_init(&d->pia1);
-    acia_init(&d->acia);
-    pia_set_input_b(&d->pia1, (d->model == DRAGON_64) ? 0xFB : 0xFF);
+    pia_set_input_b(&d->pia1, 0xFF);
     vdg_init(&d->vdg, mem_get_ram());
 
     /* Reset timing state */

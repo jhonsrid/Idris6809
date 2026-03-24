@@ -178,10 +178,11 @@ int main(void)
     printf("\nROM loading:\n");
     mem_init();
 
-    /* Load d64_2.rom at offset $4000 (maps to $C000) */
-    int rc = mem_load_rom("ROMS/d64_2.rom", 0x4000, 0x4000);
-    TEST("Load d64_2.rom at offset $4000");
+    /* Load d32.rom at offset $0000 (maps to $8000) and mirror */
+    int rc = mem_load_rom("ROMS/d32.rom", 0x0000, 0x4000);
+    TEST("Load d32.rom at offset $0000");
     CHECK(rc == 0, "load failed");
+    mem_mirror_rom(0x4000, 0x0000, 0x4000);
 
     /* The reset vector should be at $FFFE/$FFFF in ROM */
     uint16_t reset_vec = ((uint16_t)mem_read(0xFFFE) << 8) | mem_read(0xFFFF);
