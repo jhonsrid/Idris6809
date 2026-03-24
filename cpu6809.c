@@ -2284,17 +2284,19 @@ int cpu_step(CPU6809 *cpu)
 void cpu_init(CPU6809 *cpu)
 {
     memset(cpu, 0, sizeof(*cpu));
+    /* S and U default to top of low RAM so JSR before LDS doesn't
+     * wrap into the ROM vector area (Dragon 64 ROM does this). */
+    cpu->s = 0x7F00;
+    cpu->u = 0x7F00;
 }
 
 void cpu_reset(CPU6809 *cpu)
 {
+    /* MC6809 RESET only defines DP, CC, and PC.
+     * All other registers are undefined. Set them to safe defaults
+     * rather than 0 (S=0 would wrap into the vector area on first JSR). */
     cpu->dp = 0x00;
     cpu->cc = CC_F | CC_I; /* Interrupts masked */
-    cpu->d = 0;
-    cpu->x = 0;
-    cpu->y = 0;
-    cpu->u = 0;
-    cpu->s = 0;
     cpu->halted = false;
     cpu->cwai = false;
     cpu->nmi_armed = false;
