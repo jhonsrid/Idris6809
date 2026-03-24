@@ -39,6 +39,16 @@ static void pia1_write_cb(uint16_t addr, uint8_t val)
     uint8_t reg = (uint8_t)(addr & 0x03);
     pia_write(&g_dragon->pia1, reg, val);
 
+    /* CRA written (reg 1): check cassette motor control via CA2.
+     * When CRA bit 5 = 1, CA2 is output; bit 3 = level. */
+    if (reg == 1) {
+        uint8_t cra = g_dragon->pia1.cra;
+        if (cra & 0x20) {
+            bool motor = (cra & 0x08) != 0;
+            cassette_set_motor(&g_dragon->cassette, motor);
+        }
+    }
+
     /* Side effect: when PIA1 port B data register is written,
      * update VDG mode pins. Port B is at register offset 2. */
     if (reg == 2 && (g_dragon->pia1.crb & PIA_CR_DDR_SELECT)) {
@@ -119,6 +129,7 @@ void dragon_init(Dragon *d, DragonModel model)
     pia_init(&d->pia0);
     pia_init(&d->pia1);
     acia_init(&d->acia);
+    cassette_init(&d->cassette);
     cpu_init(&d->cpu);
 
     /* Register I/O handlers */
@@ -210,6 +221,14 @@ int dragon_run_scanline(Dragon *d)
         int c = cpu_step(&d->cpu);
         cycles_this_line += c;
         cycles_executed += c;
+
+        /* Advance cassette and update PIA1 PA0 (comparator input).
+         * DDRA bit 0 = 0 (input), so reads of port A return IRA bit 0. */
+        bool cas_level = cassette_update(&d->cassette, c);
+        if (cas_level)
+            d->pia1.ira |= 0x01;
+        else
+            d->pia1.ira &= 0xFE;
     }
 
     /* Carry overshoot into next scanline */

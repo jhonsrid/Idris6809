@@ -6,12 +6,12 @@ LDFLAGS =
 SDL_CFLAGS  = $(shell pkg-config --cflags sdl2)
 SDL_LDFLAGS = $(shell pkg-config --libs sdl2)
 
-SRCS    = main.c cpu6809.c memory.c sam.c vdg.c pia.c acia.c dragon.c
+SRCS    = main.c cpu6809.c memory.c sam.c vdg.c pia.c acia.c dragon.c cassette.c
 OBJS    = $(SRCS:.c=.o)
 TARGET  = idris6809
 
 # All object files except main (for linking into tests)
-LIBOBJS = cpu6809.o memory.o sam.o vdg.o pia.o acia.o dragon.o
+LIBOBJS = cpu6809.o memory.o sam.o vdg.o pia.o acia.o dragon.o cassette.o
 
 all: $(TARGET)
 
@@ -47,7 +47,10 @@ test_dragon: test_dragon.o $(LIBOBJS)
 test_frontend: test_frontend.o $(LIBOBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 
-test: test_memory test_sam test_vdg test_pia test_acia test_dragon test_frontend
+test_cassette: test_cassette.o cassette.o pia.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+test: test_memory test_sam test_vdg test_pia test_acia test_dragon test_frontend test_cassette
 	./test_memory
 	./test_sam
 	./test_vdg
@@ -55,6 +58,7 @@ test: test_memory test_sam test_vdg test_pia test_acia test_dragon test_frontend
 	./test_acia
 	./test_dragon
 	./test_frontend
+	./test_cassette
 
 clean:
 	rm -f $(OBJS) $(TARGET) \
@@ -64,14 +68,16 @@ clean:
 		test_pia test_pia.o \
 		test_acia test_acia.o \
 		test_dragon test_dragon.o \
-		test_frontend test_frontend.o
+		test_frontend test_frontend.o \
+		test_cassette test_cassette.o
 
 run: $(TARGET)
 	./$(TARGET)
 
 # Dependencies
-main.o: main.c dragon.h cpu6809.h memory.h sam.h vdg.h pia.h acia.h
-dragon.o: dragon.c dragon.h cpu6809.h memory.h sam.h vdg.h pia.h acia.h
+main.o: main.c dragon.h cpu6809.h memory.h sam.h vdg.h pia.h acia.h cassette.h
+dragon.o: dragon.c dragon.h cpu6809.h memory.h sam.h vdg.h pia.h acia.h cassette.h
+cassette.o: cassette.c cassette.h
 cpu6809.o: cpu6809.c cpu6809.h memory.h
 memory.o: memory.c memory.h
 sam.o: sam.c sam.h memory.h
@@ -85,5 +91,6 @@ test_pia.o: test_pia.c pia.h
 test_acia.o: test_acia.c acia.h
 test_dragon.o: test_dragon.c dragon.h
 test_frontend.o: test_frontend.c dragon.h
+test_cassette.o: test_cassette.c cassette.h pia.h
 
 .PHONY: all clean run test

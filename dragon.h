@@ -7,6 +7,7 @@
 #include "vdg.h"
 #include "pia.h"
 #include "acia.h"
+#include "cassette.h"
 #include <stdbool.h>
 
 typedef enum {
@@ -45,6 +46,7 @@ typedef struct {
     PIA      pia0;      /* $FF00-$FF03: keyboard, joystick, HSYNC, FSYNC */
     PIA      pia1;      /* $FF20-$FF23: DAC, sound, cassette, VDG mode */
     ACIA     acia;      /* $FF04-$FF07: serial port (Dragon 64 only) */
+    Cassette cassette;  /* Cassette tape interface */
 
     /* Keyboard matrix: 8 rows × 8 columns.
      * Each byte is a row; bit=0 means key pressed (active low). */

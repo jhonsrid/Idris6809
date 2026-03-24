@@ -5,10 +5,10 @@
 #include <string.h>
 
 /* ================================================================
- * Audio ring buffer
+ * Audio ring buffer and filtering
  * ================================================================ */
 #define AUDIO_SAMPLE_RATE   44100
-#define AUDIO_BUFFER_SIZE   4096
+#define AUDIO_BUFFER_SIZE   16384
 
 static int16_t audio_ring[AUDIO_BUFFER_SIZE];
 static volatile int audio_write_pos = 0;
@@ -30,10 +30,24 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     }
 }
 
-static void audio_push_sample(int16_t sample)
+/* Simple single-pole low-pass filter + DC blocker */
+static int32_t lpf_acc = 0;     /* Low-pass accumulator (fixed-point) */
+static int32_t dc_acc = 0;      /* DC-blocking accumulator */
+
+static void audio_push_sample(int16_t raw)
 {
+    /* Low-pass filter: smooths DAC staircase and cassette square waves.
+     * Cutoff ~4.5 kHz at 44100 Hz (alpha ≈ 0.5) */
+    lpf_acc += ((int32_t)raw * 256 - lpf_acc) >> 1;
+    int16_t sample = (int16_t)(lpf_acc >> 8);
+
+    /* DC-blocking high-pass filter: removes constant offsets.
+     * Time constant ~50ms (alpha ≈ 1/2205 at 44100 Hz) */
+    dc_acc += sample - (dc_acc >> 11);
+    sample -= (int16_t)(dc_acc >> 11);
+
     int next = (audio_write_pos + 1) % AUDIO_BUFFER_SIZE;
-    if (next != audio_read_pos) {  /* Drop if full */
+    if (next != audio_read_pos)  {
         audio_ring[audio_write_pos] = sample;
         audio_write_pos = next;
     }
@@ -125,21 +139,141 @@ static const KeyMapping key_map[] = {
     { SDL_SCANCODE_LSHIFT,    6, 7 },  /* Left Shift */
     { SDL_SCANCODE_RSHIFT,    6, 7 },  /* Right Shift */
 
-    /* Shifted punctuation: colon via Shift+; is handled by SHIFT key above.
-     * @ is at row 2 col 0 — map to a convenient key */
-    { SDL_SCANCODE_GRAVE,     2, 0 },  /* ` -> @ */
-    { SDL_SCANCODE_LEFTBRACKET,  1, 2 },  /* [ -> : (close enough) */
+    /* Extra mappings for convenience */
+    { SDL_SCANCODE_GRAVE,        2, 0 },  /* ` -> @ */
+    { SDL_SCANCODE_LEFTBRACKET,  1, 2 },  /* [ -> : */
+    { SDL_SCANCODE_APOSTROPHE,   0, 7 },  /* ' -> 7 (Dragon SHIFT+7=') */
+    /* Note: = key is NOT in the unshifted table.
+     * Unshifted = is handled specially in handle_key. */
 };
 
 #define KEY_MAP_SIZE (sizeof(key_map) / sizeof(key_map[0]))
 
-static void handle_key(Dragon *d, SDL_Scancode sc, bool pressed)
+/* Shifted key remapping: modern US keyboard → Dragon matrix.
+ * When the host SHIFT is held, some keys need to target a different
+ * Dragon matrix position so the Dragon produces the expected character.
+ *
+ * Dragon shifted punctuation:
+ *   SHIFT+1=!  +2="  +3=#  +4=$  +5=%  +6=&  +7='
+ *   SHIFT+8=(  +9=)  +:=*  +;=+  +,=<  +-==  +.=>  +/=?
+ *
+ * Modern US shifted keys that differ:
+ *   Shift+2=@ Shift+6=^ Shift+7=& Shift+8=* Shift+9=( Shift+0=)
+ *   Shift+-=_ Shift+=+
+ */
+typedef struct {
+    SDL_Scancode scancode;  /* Host key (when shift is held) */
+    int row, col;           /* Dragon matrix target */
+    bool need_shift;        /* Whether Dragon SHIFT should be pressed */
+} ShiftRemap;
+
+static const ShiftRemap shift_remap[] = {
+    { SDL_SCANCODE_2, 2, 0, false },  /* Shift+2 → @ (unshifted) */
+    { SDL_SCANCODE_6, 0, 6, true  },  /* Shift+6(^) → Dragon has no ^, send & (SHIFT+6) */
+    { SDL_SCANCODE_7, 0, 6, true  },  /* Shift+7(&) → Dragon SHIFT+6=& */
+    { SDL_SCANCODE_8, 1, 2, true  },  /* Shift+8(*) → Dragon SHIFT+:=* */
+    { SDL_SCANCODE_9, 1, 0, true  },  /* Shift+9(() → Dragon SHIFT+8=( */
+    { SDL_SCANCODE_0, 1, 1, true  },  /* Shift+0()) → Dragon SHIFT+9=) */
+    { SDL_SCANCODE_EQUALS,     1, 3, true },  /* Shift+=(+) → Dragon SHIFT+;=+ */
+    { SDL_SCANCODE_APOSTROPHE, 0, 2, true },  /* Shift+'(") → Dragon SHIFT+2=" */
+    { SDL_SCANCODE_SEMICOLON,  1, 2, false }, /* Shift+;(:) → Dragon : (unshifted) */
+};
+
+#define SHIFT_REMAP_SIZE (sizeof(shift_remap) / sizeof(shift_remap[0]))
+
+/* Track which Dragon key each host scancode was mapped to on press,
+ * so the release always goes to the correct key regardless of
+ * whether shift state has changed in between. */
+static int8_t active_row[SDL_NUM_SCANCODES];
+static int8_t active_col[SDL_NUM_SCANCODES];
+/* Track keys that override Dragon SHIFT while held:
+ *  +1 = force SHIFT on,  -1 = suppress SHIFT,  0 = no override */
+static int8_t active_shift_override[SDL_NUM_SCANCODES];
+
+static void init_key_tracking(void)
 {
-    for (int i = 0; i < (int)KEY_MAP_SIZE; i++) {
-        if (key_map[i].scancode == sc) {
-            dragon_key_press(d, key_map[i].row, key_map[i].col, pressed);
-            return;
+    memset(active_row, -1, sizeof(active_row));
+    memset(active_col, -1, sizeof(active_col));
+    memset(active_shift_override, 0, sizeof(active_shift_override));
+}
+
+static void handle_key(Dragon *d, SDL_Scancode sc, bool pressed, bool shift)
+{
+    /* SHIFT keys always map directly to Dragon SHIFT */
+    if (sc == SDL_SCANCODE_LSHIFT || sc == SDL_SCANCODE_RSHIFT) {
+        dragon_key_press(d, 6, 7, pressed);
+        return;
+    }
+
+    if (!pressed) {
+        /* Key release: use the mapping recorded at press time */
+        if (sc < SDL_NUM_SCANCODES && active_row[sc] >= 0) {
+            dragon_key_press(d, active_row[sc], active_col[sc], false);
+            /* Restore Dragon SHIFT if we were overriding it */
+            if (active_shift_override[sc] != 0) {
+                /* Restore SHIFT to match current host shift state */
+                bool host_shift = (SDL_GetModState() & KMOD_SHIFT) != 0;
+                dragon_key_press(d, 6, 7, host_shift);
+                active_shift_override[sc] = 0;
+            }
+            active_row[sc] = -1;
+            active_col[sc] = -1;
         }
+        return;
+    }
+
+    /* Key press: determine mapping */
+    int row = -1, col = -1;
+    bool force_shift = false;    /* Add Dragon SHIFT (host has no shift) */
+    bool suppress_shift = false; /* Remove Dragon SHIFT (host has shift) */
+
+    if (shift) {
+        /* Check shifted remap table first */
+        for (int i = 0; i < (int)SHIFT_REMAP_SIZE; i++) {
+            if (shift_remap[i].scancode == sc) {
+                row = shift_remap[i].row;
+                col = shift_remap[i].col;
+                suppress_shift = !shift_remap[i].need_shift;
+                break;
+            }
+        }
+    }
+
+    /* Unshifted keys that need Dragon SHIFT injected:
+     * Modern = (unshifted) → Dragon SHIFT+- to produce = */
+    if (row < 0 && !shift && sc == SDL_SCANCODE_EQUALS) {
+        row = 1; col = 5;  /* Dragon - key */
+        force_shift = true;
+    }
+
+    /* Fall through to normal mapping if no remap found */
+    if (row < 0) {
+        for (int i = 0; i < (int)KEY_MAP_SIZE; i++) {
+            if (key_map[i].scancode == sc) {
+                row = key_map[i].row;
+                col = key_map[i].col;
+                break;
+            }
+        }
+    }
+
+    if (row < 0)
+        return;  /* Unknown key */
+
+    /* Adjust Dragon SHIFT state for remapped keys.
+     * Override persists until the key is released. */
+    if (suppress_shift)
+        dragon_key_press(d, 6, 7, false);
+    if (force_shift)
+        dragon_key_press(d, 6, 7, true);
+
+    dragon_key_press(d, row, col, true);
+
+    /* Record mapping for release */
+    if (sc < SDL_NUM_SCANCODES) {
+        active_row[sc] = (int8_t)row;
+        active_col[sc] = (int8_t)col;
+        active_shift_override[sc] = suppress_shift ? -1 : (force_shift ? 1 : 0);
     }
 }
 
@@ -152,6 +286,7 @@ static void usage(const char *prog)
     fprintf(stderr, "  --rom PATH      Single ROM (Dragon 32: 16KB mirrored, or 32KB combined)\n");
     fprintf(stderr, "  --rom1 PATH     Dragon 64 ROM 1 (default: ROMS/d64_1.rom)\n");
     fprintf(stderr, "  --rom2 PATH     Dragon 64 ROM 2 (default: ROMS/d64_2.rom)\n");
+    fprintf(stderr, "  --cas PATH      Load cassette .cas file\n");
     fprintf(stderr, "  --scale N       Window scale factor (default: 3)\n");
     fprintf(stderr, "  --nosound       Disable audio\n");
     fprintf(stderr, "  --headless N    Run N frames without display then exit\n");
@@ -166,6 +301,7 @@ int main(int argc, char *argv[])
     const char *rom_path  = NULL;  /* single ROM (Dragon 32 / combined) */
     const char *rom1_path = NULL;
     const char *rom2_path = NULL;
+    const char *cas_path  = NULL;
     int scale = 3;
     bool enable_sound = true;
     bool debug = false;
@@ -174,6 +310,8 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--rom") == 0 && i + 1 < argc)
             rom_path = argv[++i];
+        else if (strcmp(argv[i], "--cas") == 0 && i + 1 < argc)
+            cas_path = argv[++i];
         else if (strcmp(argv[i], "--rom1") == 0 && i + 1 < argc)
             rom1_path = argv[++i];
         else if (strcmp(argv[i], "--rom2") == 0 && i + 1 < argc)
@@ -215,6 +353,15 @@ int main(int argc, char *argv[])
     }
 
     dragon_reset(&dragon);
+    init_key_tracking();
+
+    if (cas_path) {
+        if (cassette_load(&dragon.cassette, cas_path) != 0)
+            return 1;
+        if (debug)
+            fprintf(stderr, "Cassette loaded: %s (%zu bytes)\n",
+                    cas_path, cassette_get_size(&dragon.cassette));
+    }
 
     if (debug)
         fprintf(stderr, "Reset vector: $%04X\n", dragon.cpu.pc);
@@ -317,11 +464,13 @@ int main(int argc, char *argv[])
                 dragon.running = false;
                 break;
             case SDL_KEYDOWN:
-                if (!event.key.repeat)
-                    handle_key(&dragon, event.key.keysym.scancode, true);
+                if (!event.key.repeat) {
+                    bool shift = (event.key.keysym.mod & KMOD_SHIFT) != 0;
+                    handle_key(&dragon, event.key.keysym.scancode, true, shift);
+                }
                 break;
             case SDL_KEYUP:
-                handle_key(&dragon, event.key.keysym.scancode, false);
+                handle_key(&dragon, event.key.keysym.scancode, false, false);
                 break;
             }
         }
@@ -346,6 +495,10 @@ int main(int argc, char *argv[])
                     int16_t sample = (int16_t)((int)dac - 32) * 512;
                     if (sbs)
                         sample += 4096;
+
+                    /* Mix in cassette audio when playing */
+                    if (cassette_is_playing(&dragon.cassette))
+                        sample += dragon.cassette.signal_level ? 4096 : -4096;
 
                     audio_push_sample(sample);
                 }
