@@ -36,6 +36,7 @@ Uses `pkg-config` for SDL2 detection.
 | `--load PATH` | Restore a previously saved emulator state from a `.state` file. |
 | `--scale N` | Window scale factor, 1-8 (default: 3). |
 | `--nosound` | Disable audio output. |
+| `--noloadsound` | Disable cassette loading sounds (keeps other audio). |
 | `--headless N` | Run N frames without display then exit. Prints CPU state on completion. |
 | `--debug` | Print diagnostic info (PC, reset vector) to stderr. |
 

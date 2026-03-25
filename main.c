@@ -290,6 +290,7 @@ static void usage(const char *prog)
     fprintf(stderr, "  --load PATH     Load saved state from file\n");
     fprintf(stderr, "  --scale N       Window scale factor (default: 3)\n");
     fprintf(stderr, "  --nosound       Disable audio\n");
+    fprintf(stderr, "  --noloadsound   Disable cassette loading sounds\n");
     fprintf(stderr, "  --headless N    Run N frames without display then exit\n");
     fprintf(stderr, "  --debug         Enable debug output\n");
 }
@@ -305,6 +306,7 @@ int main(int argc, char *argv[])
     const char *load_path = NULL;
     int scale = 3;
     bool enable_sound = true;
+    bool enable_cas_sound = true;
     bool debug = false;
     int headless_frames = 0;
 
@@ -321,6 +323,8 @@ int main(int argc, char *argv[])
             scale = atoi(argv[++i]);
         else if (strcmp(argv[i], "--nosound") == 0)
             enable_sound = false;
+        else if (strcmp(argv[i], "--noloadsound") == 0)
+            enable_cas_sound = false;
         else if (strcmp(argv[i], "--headless") == 0 && i + 1 < argc) {
             headless_frames = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--debug") == 0)
@@ -513,7 +517,7 @@ int main(int argc, char *argv[])
                         sample += 4096;
 
                     /* Mix in cassette audio when playing */
-                    if (cassette_is_playing(&dragon.cassette))
+                    if (enable_cas_sound && cassette_is_playing(&dragon.cassette))
                         sample += dragon.cassette.signal_level ? 4096 : -4096;
 
                     audio_push_sample(sample);
