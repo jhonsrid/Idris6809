@@ -254,7 +254,7 @@ int main(void)
     CHECK(DRAGON_CPU_HZ > 885000 && DRAGON_CPU_HZ < 892000, "out of range");
 
     /* --- Summary --- */
-    printf("\n=== Results: %d passed, %d failed ===\n",
+    printf("\n=== Dragon 32 Machine Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

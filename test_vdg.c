@@ -401,7 +401,7 @@ int main(void)
           "expected matching background");
 
     /* --- Summary --- */
-    printf("\n=== Results: %d passed, %d failed ===\n",
+    printf("\n=== VDG (MC6847) Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

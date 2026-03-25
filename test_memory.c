@@ -196,7 +196,7 @@ int main(void)
     CHECK(mem_read(0xC000) != 0x00, "expected non-zero ROM data");
 
     /* --- Summary --- */
-    printf("\n=== Results: %d passed, %d failed ===\n",
+    printf("\n=== Memory Subsystem Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

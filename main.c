@@ -286,6 +286,7 @@ static void usage(const char *prog)
     fprintf(stderr, "Usage: %s [options]\n", prog);
     fprintf(stderr, "  --rom PATH      ROM file (default: ROMS/d32.rom)\n");
     fprintf(stderr, "  --cas PATH      Load cassette .cas file\n");
+    fprintf(stderr, "  --cartridge PATH  Load cartridge ROM (8KB/16KB, maps at $C000)\n");
     fprintf(stderr, "  --load PATH     Load saved state from file\n");
     fprintf(stderr, "  --scale N       Window scale factor (default: 3)\n");
     fprintf(stderr, "  --nosound       Disable audio\n");
@@ -300,6 +301,7 @@ int main(int argc, char *argv[])
 {
     const char *rom_path  = NULL;
     const char *cas_path  = NULL;
+    const char *cart_path = NULL;
     const char *load_path = NULL;
     int scale = 3;
     bool enable_sound = true;
@@ -311,6 +313,8 @@ int main(int argc, char *argv[])
             rom_path = argv[++i];
         else if (strcmp(argv[i], "--cas") == 0 && i + 1 < argc)
             cas_path = argv[++i];
+        else if (strcmp(argv[i], "--cartridge") == 0 && i + 1 < argc)
+            cart_path = argv[++i];
         else if (strcmp(argv[i], "--load") == 0 && i + 1 < argc)
             load_path = argv[++i];
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc)
@@ -340,6 +344,13 @@ int main(int argc, char *argv[])
 
     if (dragon_load_rom(rom_path) != 0)
         return 1;
+
+    if (cart_path) {
+        if (mem_load_cartridge(cart_path) != 0)
+            return 1;
+        if (debug)
+            fprintf(stderr, "Cartridge loaded: %s\n", cart_path);
+    }
 
     dragon_reset(&dragon);
     init_key_tracking();
@@ -509,6 +520,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
+        dragon_end_frame(&dragon);
 
         /* Update texture from framebuffer */
         const uint32_t *fb = dragon_get_framebuffer(&dragon);

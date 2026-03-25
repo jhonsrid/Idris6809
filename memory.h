@@ -42,4 +42,10 @@ void mem_register_sam(sam_write_fn fn);
 /* Direct RAM access (for VDG rendering, DMA, etc.) */
 uint8_t *mem_get_ram(void);
 
+/* Cartridge ROM support ($C000-$FEFF, up to 16KB).
+ * Auto-detects size from file. Overlays the system ROM mirror. */
+int  mem_load_cartridge(const char *path);
+void mem_eject_cartridge(void);
+bool mem_has_cartridge(void);
+
 #endif

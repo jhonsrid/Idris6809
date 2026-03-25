@@ -181,6 +181,22 @@ void dragon_reset(Dragon *d)
 
     /* Reset CPU — loads PC from reset vector */
     cpu_reset(&d->cpu);
+
+    /* Cartridge auto-start: after BASIC boots, it checks $71==$55 and
+     * if the byte at [$72-$73] == $12 (signature), it JMPs there.
+     * Pre-set $72-$73 to $C000 so BASIC finds the cartridge. The ROM
+     * also needs to start with $12 for auto-start to trigger.
+     * If no $12 signature, assert CART (PIA1 CB1) after boot delay
+     * to trigger FIRQ, which restarts BASIC with JMP $C000. */
+    if (mem_has_cartridge()) {
+        uint8_t *ram = mem_get_ram();
+        ram[0x72] = 0xC0;
+        ram[0x73] = 0x00;  /* EXEC address = $C000 */
+        /* If cartridge lacks $12 signature, use FIRQ fallback */
+        d->cart_firq_delay = (mem_read(0xC000) != 0x12) ? 120 : 0;
+    } else {
+        d->cart_firq_delay = 0;
+    }
 }
 
 int dragon_run_scanline(Dragon *d)
@@ -234,6 +250,18 @@ int dragon_run_scanline(Dragon *d)
     return cycles_executed;
 }
 
+void dragon_end_frame(Dragon *d)
+{
+    d->frame_count++;
+
+    /* Delayed cartridge FIRQ: after BASIC has booted and enabled
+     * PIA1 CB1 (rising edge, CRB bit1=1), pulse CART high to trigger. */
+    if (d->cart_firq_delay > 0 && --d->cart_firq_delay == 0) {
+        pia_set_cb1(&d->pia1, true);
+        update_cpu_interrupts(d);
+    }
+}
+
 int dragon_run_frame(Dragon *d)
 {
     int total_cycles = 0;
@@ -242,7 +270,7 @@ int dragon_run_frame(Dragon *d)
         total_cycles += dragon_run_scanline(d);
     }
 
-    d->frame_count++;
+    dragon_end_frame(d);
     return total_cycles;
 }
 

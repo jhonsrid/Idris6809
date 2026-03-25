@@ -202,6 +202,6 @@ int main(void)
 
     cassette_eject(&cas);
 
-    printf("\n=== Results: %d passed, %d failed ===\n", pass_count, fail_count);
+    printf("\n=== Cassette Tests: %d passed, %d failed ===\n", pass_count, fail_count);
     return fail_count > 0 ? 1 : 0;
 }

@@ -248,7 +248,7 @@ int main(void)
     CHECK(sam_get_ty(&g_sam) == false, "expected false");
 
     /* --- Summary --- */
-    printf("\n=== Results: %d passed, %d failed ===\n",
+    printf("\n=== SAM (MC6883) Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

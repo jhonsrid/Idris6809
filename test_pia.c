@@ -370,7 +370,7 @@ int main(void)
     CHECK(pb == 0xFB, "expected $FB");
 
     /* --- Summary --- */
-    printf("\n=== Results: %d passed, %d failed ===\n",
+    printf("\n=== PIA (MC6821) Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

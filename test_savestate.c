@@ -113,6 +113,10 @@ int main(void)
     /* --- 2: Bad file handling --- */
     printf("\nError handling:\n");
 
+    /* Suppress expected error messages during negative tests */
+    FILE *saved_stderr = stderr;
+    stderr = fopen("/dev/null", "w");
+
     TEST("Load non-existent file fails");
     CHECK(savestate_load(&d, "/tmp/no_such_file.state") != 0, "should fail");
 
@@ -122,6 +126,9 @@ int main(void)
     fclose(f);
     TEST("Load garbage file fails");
     CHECK(savestate_load(&d, TMPFILE) != 0, "should fail on bad magic");
+
+    fclose(stderr);
+    stderr = saved_stderr;
 
     /* --- 3: Filename generation --- */
     printf("\nFilename generation:\n");
@@ -136,6 +143,6 @@ int main(void)
     /* Cleanup */
     unlink(TMPFILE);
 
-    printf("\n=== Results: %d passed, %d failed ===\n", pass_count, fail_count);
+    printf("\n=== Save State Tests: %d passed, %d failed ===\n", pass_count, fail_count);
     return fail_count > 0 ? 1 : 0;
 }

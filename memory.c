@@ -24,6 +24,10 @@ static uint8_t ram[0x10000];   /* Full 64KB RAM */
 static uint8_t rom[0x8000];    /* 32KB ROM buffer ($8000-$FFFF image) */
 static bool    rom_mode;       /* true = ROM overlays $8000-$FEFF (boot default) */
 
+/* Cartridge ROM: maps at $C000-$FEFF, overlaying the system ROM mirror */
+static uint8_t cart_rom[0x4000];  /* 16KB max */
+static uint16_t cart_size;         /* Actual size (0 = no cartridge) */
+
 /* I/O dispatch table for $FF00-$FFBF (192 bytes) */
 #define IO_BASE  0xFF00
 #define IO_SIZE  0x00C0  /* $FF00 to $FFBF inclusive */
@@ -42,6 +46,8 @@ void mem_init(void)
     memset(io_write_handlers, 0, sizeof(io_write_handlers));
     sam_handler = NULL;
     rom_mode = true;  /* Boot with ROM enabled */
+    memset(cart_rom, 0, sizeof(cart_rom));
+    cart_size = 0;
 }
 
 int mem_load_rom(const char *path, uint16_t rom_offset, uint16_t size)
@@ -104,6 +110,16 @@ uint8_t mem_read(uint16_t addr)
     if (addr >= 0xFFE0)
         return rom[addr - 0x8000];
 
+    /* $C000-$FEFF: cartridge ROM overlays this range if present */
+    if (cart_size > 0 && addr >= 0xC000 && addr < 0xFF00) {
+        uint16_t cart_offset = addr - 0xC000;
+        if (cart_offset < cart_size)
+            return cart_rom[cart_offset];
+        /* 8KB carts mirror: $E000-$FEFF reads from $C000-$DFFF */
+        if (cart_size == 0x2000)
+            return cart_rom[cart_offset & 0x1FFF];
+    }
+
     /* $8000-$FEFF: ROM or RAM depending on mode */
     if (rom_mode)
         return rom[addr - 0x8000];
@@ -165,4 +181,53 @@ void mem_register_sam(sam_write_fn fn)
 uint8_t *mem_get_ram(void)
 {
     return ram;
+}
+
+int mem_load_cartridge(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "Failed to open cartridge: %s\n", path);
+        return -1;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fprintf(stderr, "Failed to seek cartridge: %s\n", path);
+        fclose(f);
+        return -1;
+    }
+    long size = ftell(f);
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "Failed to seek cartridge: %s\n", path);
+        fclose(f);
+        return -1;
+    }
+
+    if (size <= 0 || size > 0x4000) {
+        fprintf(stderr, "Cartridge %s: invalid size %ld (max 16384)\n", path, size);
+        fclose(f);
+        return -1;
+    }
+
+    memset(cart_rom, 0xFF, sizeof(cart_rom));
+    size_t n = fread(cart_rom, 1, (size_t)size, f);
+    fclose(f);
+
+    if ((long)n != size) {
+        fprintf(stderr, "Cartridge %s: expected %ld bytes, got %zu\n", path, size, n);
+        return -1;
+    }
+
+    cart_size = (uint16_t)size;
+    return 0;
+}
+
+void mem_eject_cartridge(void)
+{
+    memset(cart_rom, 0, sizeof(cart_rom));
+    cart_size = 0;
+}
+
+bool mem_has_cartridge(void)
+{
+    return cart_size > 0;
 }

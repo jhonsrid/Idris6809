@@ -51,6 +51,9 @@ typedef struct {
     /* Frame counter */
     int      frame_count;
 
+    /* Cartridge auto-start: delay CART assertion until BASIC enables IRQs */
+    int      cart_firq_delay;
+
     /* Running state */
     bool     running;
 } Dragon;
@@ -74,6 +77,11 @@ int dragon_run_frame(Dragon *d);
 /* Run a single scanline (57 CPU cycles).
  * Returns total CPU cycles executed this scanline. */
 int dragon_run_scanline(Dragon *d);
+
+/* End-of-frame bookkeeping (frame counter, cartridge auto-start).
+ * Called automatically by dragon_run_frame(). Call manually when
+ * running scanlines individually (e.g. for audio interleaving). */
+void dragon_end_frame(Dragon *d);
 
 /* Press/release a key in the keyboard matrix.
  * row: 0-7, col: 0-7, pressed: true=down, false=up */
