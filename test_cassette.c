@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int pass_count, fail_count;
 static const char *current_test;
@@ -199,6 +200,156 @@ int main(void)
 
     TEST("Playing after rewind");
     CHECK(cas.playing, "expected playing");
+
+    cassette_eject(&cas);
+
+    /* --- 11: cassette_load from file --- */
+    printf("\nFile I/O:\n");
+    {
+        const char *tmppath = "/tmp/idris6809_test_cassette.cas";
+
+        /* Write a known .cas file */
+        FILE *f = fopen(tmppath, "wb");
+        uint8_t file_data[] = { 0x55, 0x55, 0x55, 0x3C, 0x01, 0x00 };
+        fwrite(file_data, 1, sizeof(file_data), f);
+        fclose(f);
+
+        cassette_init(&cas);
+        int rc = cassette_load(&cas, tmppath);
+        TEST("cassette_load from file succeeds");
+        CHECK(rc == 0, "load failed");
+
+        TEST("Size matches file");
+        CHECK(cassette_get_size(&cas) == sizeof(file_data), "size mismatch");
+
+        TEST("Playing after load");
+        CHECK(cas.playing, "expected playing");
+
+        TEST("Position at start");
+        CHECK(cassette_get_position(&cas) == 0, "expected 0");
+
+        /* Verify data was loaded correctly by checking first bit */
+        /* $55 = 01010101, bit 0 = 1 (LSB first after rewind) */
+        TEST("First bit is 1 (LSB of $55)");
+        CHECK((cas.data[0] & 0x01) == 1, "expected bit 0 = 1");
+
+        cassette_eject(&cas);
+        unlink(tmppath);
+    }
+
+    /* --- 12: cassette_load error handling --- */
+    printf("\nLoad error handling:\n");
+    {
+        FILE *saved_err = stderr;
+        stderr = fopen("/dev/null", "w");
+
+        cassette_init(&cas);
+        int rc = cassette_load(&cas, "/tmp/no_such_file.cas");
+        TEST("Load non-existent file fails");
+        CHECK(rc != 0, "should fail");
+
+        TEST("Not playing after failed load");
+        CHECK(!cas.playing, "expected not playing");
+
+        /* Empty file */
+        const char *tmppath = "/tmp/idris6809_test_empty.cas";
+        FILE *f = fopen(tmppath, "wb");
+        fclose(f);
+        rc = cassette_load(&cas, tmppath);
+        TEST("Load empty file fails");
+        CHECK(rc != 0, "should fail");
+        unlink(tmppath);
+
+        fclose(stderr);
+        stderr = saved_err;
+    }
+
+    /* --- 13: cassette_is_playing --- */
+    printf("\ncassette_is_playing:\n");
+    cassette_init(&cas);
+    uint8_t play_data[] = { 0xFF, 0xFF };
+    load_test_data(&cas, play_data, sizeof(play_data));
+
+    TEST("is_playing false when motor off");
+    cassette_set_motor(&cas, false);
+    CHECK(!cassette_is_playing(&cas), "expected false");
+
+    TEST("is_playing true when motor on and playing");
+    cassette_set_motor(&cas, true);
+    CHECK(cassette_is_playing(&cas), "expected true");
+
+    /* Run to end of tape */
+    for (int i = 0; i < 16; i++) {
+        cassette_update(&cas, 218);
+        cassette_update(&cas, 218);
+    }
+    TEST("is_playing false at end of tape");
+    CHECK(!cassette_is_playing(&cas), "expected false");
+
+    /* --- 14: End of tape behavior --- */
+    printf("\nEnd of tape:\n");
+    uint8_t single[] = { 0xFF };
+    load_test_data(&cas, single, 1);
+    cassette_set_motor(&cas, true);
+
+    /* Run through all 8 bits */
+    for (int i = 0; i < 8; i++) {
+        cassette_update(&cas, 218);
+        cassette_update(&cas, 218);
+    }
+    TEST("Playing becomes false at end");
+    CHECK(!cas.playing, "expected not playing");
+
+    /* Signal level should be stable after end */
+    bool level1 = cassette_update(&cas, 1000);
+    bool level2 = cassette_update(&cas, 1000);
+    TEST("Signal stable after end of tape");
+    CHECK(level1 == level2, "signal should not toggle");
+
+    /* --- 15: Motor off while playing --- */
+    printf("\nMotor off while playing:\n");
+    load_test_data(&cas, play_data, sizeof(play_data));
+    cassette_set_motor(&cas, true);
+
+    /* Advance a little */
+    cassette_update(&cas, 218);
+    bool sig_before = cas.signal_level;
+    size_t pos_before = cas.byte_pos;
+
+    cassette_set_motor(&cas, false);
+    cassette_update(&cas, 10000);
+    TEST("Motor off: position unchanged");
+    CHECK(cas.byte_pos == pos_before, "position should not change");
+
+    TEST("Motor off: signal returned unchanged");
+    CHECK(cas.signal_level == sig_before, "signal should be same");
+
+    /* Resume */
+    cassette_set_motor(&cas, true);
+    cassette_update(&cas, 218);
+    TEST("Motor on: playback resumes");
+    CHECK(cas.signal_level != sig_before || cas.byte_pos != pos_before,
+          "should advance after motor on");
+
+    /* --- 16: Init vs rewind bit_pos consistency --- */
+    printf("\nInit/rewind bit_pos:\n");
+    cassette_init(&cas);
+    TEST("After init: bit_pos = 7 (no data loaded yet)");
+    CHECK(cas.bit_pos == 7, "expected 7");
+
+    load_test_data(&cas, single, 1);
+    TEST("After rewind: bit_pos = 0 (LSB first)");
+    CHECK(cas.bit_pos == 0, "expected 0");
+
+    /* Eject and check */
+    cassette_eject(&cas);
+    TEST("After eject: bit_pos = 7");
+    CHECK(cas.bit_pos == 7, "expected 7");
+
+    /* Rewind with no data should be safe */
+    cassette_rewind(&cas);
+    TEST("Rewind with no data: safe, not playing");
+    CHECK(!cas.playing, "expected not playing");
 
     cassette_eject(&cas);
 

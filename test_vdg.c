@@ -400,6 +400,54 @@ int main(void)
     CHECK(vdg.framebuffer[0][0] == vdg.framebuffer[191][0],
           "expected matching background");
 
+    /* --- Test 14: Semigraphics 6 byte patterns --- */
+    /* SG6 on a real MC6847 uses bit 7=1 with 6 block bits (2×3 grid)
+     * and CSS-only color. The Dragon VDG implementation renders these
+     * as SG4 (interpreting bits 6-4 as color and bits 3-0 as 2×2 blocks).
+     * This test documents the actual rendering behavior. */
+    printf("\nSemigraphics 6 byte patterns (rendered as SG4):\n");
+    memset(ram, 0, 512);
+    vdg_init(&vdg, ram);
+    vdg_set_mode(&vdg, 0x00);  /* text/SG mode */
+
+    /* Byte $BF = 1 011 1111: SG4 interprets as color 3 (red), all 4 blocks on */
+    ram[0] = 0xBF;
+    vdg_render_scanline(&vdg, 0, 0x0000);   /* top half */
+    vdg_render_scanline(&vdg, 6, 0x0000);   /* bottom half */
+
+    TEST("SG byte $BF: top-left block on (SG4 color 3)");
+    CHECK((vdg.framebuffer[0][0] & 0xFF0000) > 0x80, "expected red");
+
+    TEST("SG byte $BF: bottom-right block on");
+    CHECK((vdg.framebuffer[6][4] & 0xFF0000) > 0x80, "expected red");
+
+    /* Byte $FF = 1 111 1111: SG4 color 7 (orange), all blocks on */
+    ram[0] = 0xFF;
+    vdg_render_scanline(&vdg, 0, 0x0000);
+
+    TEST("SG byte $FF: color 7 (orange), all blocks on");
+    CHECK((vdg.framebuffer[0][0] & 0xFF0000) > 0x80, "expected orange component");
+    CHECK(vdg.framebuffer[0][0] == vdg.framebuffer[0][4], "left == right");
+
+    /* Byte $80 = 1 000 0000: SG4 color 0 (green), no blocks on */
+    ram[0] = 0x80;
+    vdg_render_scanline(&vdg, 0, 0x0000);
+
+    TEST("SG byte $80: all blocks off (black)");
+    CHECK(vdg.framebuffer[0][0] == 0x00000000, "expected black");
+
+    /* Byte $88 = 1 000 1000: SG4 color 0 (green), top-left only */
+    ram[0] = 0x88;
+    vdg_render_scanline(&vdg, 0, 0x0000);   /* top half */
+    vdg_render_scanline(&vdg, 6, 0x0000);   /* bottom half */
+
+    TEST("SG byte $88: top-left green, top-right black");
+    CHECK((vdg.framebuffer[0][0] & 0x00FF00) > 0x80, "expected green");
+    CHECK(vdg.framebuffer[0][4] == 0x00000000, "expected black");
+
+    TEST("SG byte $88: bottom half all black");
+    CHECK(vdg.framebuffer[6][0] == 0x00000000, "expected black");
+
     /* --- Summary --- */
     printf("\n=== VDG (MC6847) Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);

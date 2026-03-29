@@ -140,6 +140,111 @@ int main(void)
     TEST("Filename has date format");
     CHECK(strlen(fname) == 21, "expected yyyymmdd-hhmmss.state (21 chars)");
 
+    /* --- 4: Version mismatch --- */
+    printf("\nVersion mismatch:\n");
+    {
+        FILE *saved_err = stderr;
+        stderr = fopen("/dev/null", "w");
+
+        /* Write file with correct magic but wrong version */
+        f = fopen(TMPFILE, "wb");
+        uint32_t magic = SAVESTATE_MAGIC;
+        uint32_t bad_version = 0xFFFF;
+        fwrite(&magic, 4, 1, f);
+        fwrite(&bad_version, 4, 1, f);
+        fclose(f);
+
+        TEST("Load with wrong version fails");
+        CHECK(savestate_load(&d, TMPFILE) != 0, "should fail on bad version");
+
+        fclose(stderr);
+        stderr = saved_err;
+    }
+
+    /* --- 5: Truncated file --- */
+    printf("\nTruncated file:\n");
+    {
+        FILE *saved_err = stderr;
+        stderr = fopen("/dev/null", "w");
+
+        /* Write correct magic+version but truncate after that */
+        f = fopen(TMPFILE, "wb");
+        uint32_t magic = SAVESTATE_MAGIC;
+        uint32_t version = SAVESTATE_VERSION;
+        fwrite(&magic, 4, 1, f);
+        fwrite(&version, 4, 1, f);
+        /* Write only 100 bytes of "RAM" instead of full 64KB */
+        uint8_t partial[100];
+        memset(partial, 0, sizeof(partial));
+        fwrite(partial, 1, sizeof(partial), f);
+        fclose(f);
+
+        TEST("Load truncated file fails");
+        CHECK(savestate_load(&d, TMPFILE) != 0, "should fail on truncated data");
+
+        fclose(stderr);
+        stderr = saved_err;
+    }
+
+    /* --- 6: Cassette state save/load (position preserved) --- */
+    printf("\nCassette state in savestate:\n");
+    {
+        /* Create a temporary cassette file */
+        const char *cas_path = "/tmp/idris6809_test_cas.cas";
+        f = fopen(cas_path, "wb");
+        uint8_t cas_data[] = { 0x55, 0x55, 0x55, 0x3C, 0x01, 0x00, 0xFF, 0xFF };
+        fwrite(cas_data, 1, sizeof(cas_data), f);
+        fclose(f);
+
+        /* Set up dragon with cassette */
+        dragon_init(&d);
+        dragon_load_rom("ROMS/d32.rom");
+        dragon_reset(&d);
+
+        /* Load cassette and advance playback */
+        cassette_load(&d.cassette, cas_path);
+        cassette_set_motor(&d.cassette, true);
+        /* Run some updates to advance cassette position */
+        for (int i = 0; i < 20; i++)
+            cassette_update(&d.cassette, 218);
+
+        size_t saved_byte_pos = d.cassette.byte_pos;
+        int saved_bit_pos = d.cassette.bit_pos;
+        bool saved_motor = d.cassette.motor_on;
+        bool saved_playing = d.cassette.playing;
+
+        /* Save state */
+        rc = savestate_save(&d, TMPFILE);
+        TEST("Save with cassette state succeeds");
+        CHECK(rc == 0, "save failed");
+
+        /* Trash cassette state but keep data loaded */
+        d.cassette.byte_pos = 0;
+        d.cassette.bit_pos = 0;
+        d.cassette.motor_on = false;
+
+        /* Load state */
+        rc = savestate_load(&d, TMPFILE);
+        TEST("Load restores cassette byte_pos");
+        CHECK(d.cassette.byte_pos == saved_byte_pos, "byte_pos mismatch");
+
+        TEST("Load restores cassette bit_pos");
+        CHECK(d.cassette.bit_pos == saved_bit_pos, "bit_pos mismatch");
+
+        TEST("Load restores cassette motor_on");
+        CHECK(d.cassette.motor_on == saved_motor, "motor_on mismatch");
+
+        TEST("Load restores cassette playing");
+        CHECK(d.cassette.playing == saved_playing, "playing mismatch");
+
+        /* Cassette data pointer is NOT saved — verify it's still valid */
+        TEST("Cassette data pointer preserved (not saved/restored)");
+        CHECK(d.cassette.data != NULL, "data should still be allocated");
+
+        cassette_eject(&d.cassette);
+        unlink(cas_path);
+    }
+
     /* Cleanup */
     unlink(TMPFILE);
 

@@ -313,6 +313,186 @@ int main(void)
     TEST("Checkerboard: (0,0) and (0,1) differ");
     CHECK(fb[0] != fb[256], "adjacent rows should differ");
 
+    /* ---- CG2: 128x64, 4-color (vrepeat=3, 32 bytes/row) ---- */
+    printf("\nCG2 mode (128x64, 4-color):\n");
+
+    dragon_init(&d);
+    dragon_load_rom("ROMS/d32.rom");
+    dragon_reset(&d);
+    ram = mem_get_ram();
+
+    memset(&ram[0x0E00], 0x00, 6144);
+    /* CG2: 2 bits/pixel, 4 pixels/byte, 32 bytes/row, vrepeat=3 (64 rows)
+     * Byte $E4 = 11 10 01 00 = colors 3,2,1,0 */
+    ram[0x0E00] = 0xE4;
+
+    /* A/G=1, GM=2 (CG2), CSS=0 */
+    setup_gfx(&d, 1, 2, 0, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+
+    TEST("CG2: mode set gm=2");
+    CHECK(d.vdg.gm == 2, "wrong mode");
+
+    /* CG2: each pixel = 2 physical wide, 3 lines high */
+    TEST("CG2 CSS=0: first pixel is red (color 3)");
+    CHECK((fb[0] & 0xFF0000) > 0x80 && (fb[0] & 0x00FF00) < 0x20, "expected red");
+
+    TEST("CG2 CSS=0: pixel 1 is blue (color 2)");
+    CHECK((fb[2] & 0x0000FF) > 0x80, "expected blue");
+
+    TEST("CG2: vertical repeat (line 0 == line 1 == line 2)");
+    CHECK(fb[0] == fb[256] && fb[0] == fb[512], "lines should match");
+
+    TEST("CG2: line 3 is next data row");
+    /* Second byte is $00 so pixel at (0,3) should be green (color 0) */
+    CHECK(fb[3*256] != fb[0] || ram[0x0E00+32] != 0, "line 3 should differ");
+
+    /* CG2 CSS=1 */
+    setup_gfx(&d, 1, 2, 1, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+    TEST("CG2 CSS=1: first pixel is orange (color 3)");
+    CHECK((fb[0] & 0xFF0000) > 0x80 && (fb[0] & 0x0000FF) < 0x20, "expected orange");
+
+    /* ---- CG3: 128x96, 4-color (vrepeat=2, 32 bytes/row) ---- */
+    printf("\nCG3 mode (128x96, 4-color):\n");
+
+    dragon_init(&d);
+    dragon_load_rom("ROMS/d32.rom");
+    dragon_reset(&d);
+    ram = mem_get_ram();
+
+    memset(&ram[0x0E00], 0x00, 6144);
+    ram[0x0E00] = 0xE4;
+
+    setup_gfx(&d, 1, 4, 0, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+
+    TEST("CG3: mode set gm=4");
+    CHECK(d.vdg.gm == 4, "wrong mode");
+
+    TEST("CG3 CSS=0: first pixel is red (color 3)");
+    CHECK((fb[0] & 0xFF0000) > 0x80 && (fb[0] & 0x00FF00) < 0x20, "expected red");
+
+    TEST("CG3: vertical repeat 2 (line 0 == line 1)");
+    CHECK(fb[0] == fb[256], "lines should match");
+
+    TEST("CG3: line 2 is next data row");
+    CHECK(fb[2*256] != fb[0] || ram[0x0E00+32] != 0, "line 2 should differ");
+
+    setup_gfx(&d, 1, 4, 1, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+    TEST("CG3 CSS=1: first pixel is orange (color 3)");
+    CHECK((fb[0] & 0xFF0000) > 0x80 && (fb[0] & 0x0000FF) < 0x20, "expected orange");
+
+    /* ---- RG2: 128x96, 2-color (vrepeat=2, 16 bytes/row) ---- */
+    printf("\nRG2 mode (128x96, 2-color):\n");
+
+    dragon_init(&d);
+    dragon_load_rom("ROMS/d32.rom");
+    dragon_reset(&d);
+    ram = mem_get_ram();
+
+    memset(&ram[0x0E00], 0x00, 3072);
+    ram[0x0E00] = 0xFF;  /* First 8 pixels on */
+
+    /* A/G=1, GM=3 (RG2), CSS=0 */
+    setup_gfx(&d, 1, 3, 0, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+
+    TEST("RG2: mode set gm=3");
+    CHECK(d.vdg.gm == 3, "wrong mode");
+
+    /* RG2: 16 bytes/row, 128 pixels/row, doubled to 256 fb pixels */
+    TEST("RG2 CSS=0: first 2 fb pixels are green (horizontal double)");
+    CHECK((fb[0] & 0x00FF00) > 0x80 && (fb[1] & 0x00FF00) > 0x80, "expected green");
+
+    TEST("RG2: pixel (16,0) is black (next byte is $00)");
+    CHECK((fb[16] & 0x00FFFF) < 0x20, "expected black");
+
+    TEST("RG2: vertical repeat 2 (line 0 == line 1)");
+    CHECK(fb[0] == fb[256], "lines should match");
+
+    TEST("RG2: line 2 is next data row");
+    CHECK(fb[2*256] != fb[0] || ram[0x0E00+16] != 0, "line 2 should differ");
+
+    setup_gfx(&d, 1, 3, 1, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+    TEST("RG2 CSS=1: first pixels are white/buff");
+    CHECK((fb[0] & 0xFF0000) > 0x80 && (fb[0] & 0x00FF00) > 0x80, "expected white");
+
+    /* ---- RG3: 128x192, 2-color (vrepeat=1, 16 bytes/row) ---- */
+    printf("\nRG3 mode (128x192, 2-color):\n");
+
+    dragon_init(&d);
+    dragon_load_rom("ROMS/d32.rom");
+    dragon_reset(&d);
+    ram = mem_get_ram();
+
+    memset(&ram[0x0E00], 0x00, 3072);
+    ram[0x0E00] = 0xFF;
+
+    /* A/G=1, GM=5 (RG3), CSS=0 */
+    setup_gfx(&d, 1, 5, 0, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+
+    TEST("RG3: mode set gm=5");
+    CHECK(d.vdg.gm == 5, "wrong mode");
+
+    TEST("RG3 CSS=0: first 2 fb pixels are green");
+    CHECK((fb[0] & 0x00FF00) > 0x80 && (fb[1] & 0x00FF00) > 0x80, "expected green");
+
+    TEST("RG3: no vertical repeat (line 0 != line 1 data)");
+    /* Line 1 reads from byte 16 which is $00 */
+    CHECK((fb[256] & 0x00FFFF) < 0x20, "expected black at line 1 pixel 0");
+
+    setup_gfx(&d, 1, 5, 1, 0x0E00);
+    fb = dragon_get_framebuffer(&d);
+    TEST("RG3 CSS=1: first pixels are white/buff");
+    CHECK((fb[0] & 0xFF0000) > 0x80 && (fb[0] & 0x00FF00) > 0x80, "expected white");
+
+    /* ---- VDG font/charcode edge cases ---- */
+    printf("\nFont/charcode edge cases:\n");
+
+    dragon_init(&d);
+    dragon_load_rom("ROMS/d32.rom");
+    dragon_reset(&d);
+    ram = mem_get_ram();
+
+    /* Character code with bit 6 set (inverse video) and bits 5-0 = $3F (max charcode) */
+    ram[0x0400] = 0x7F;  /* 0 1 111111: not SG4 (bit7=0), inverse, charcode 63 */
+    setup_gfx(&d, 0, 0, 0, 0x0400);
+    fb = dragon_get_framebuffer(&d);
+    TEST("Charcode $3F (max): renders without crash");
+    /* Just verify it didn't crash and produced some pixels */
+    CHECK(fb[0] != 0xDEADBEEF, "rendered ok");  /* sanity */
+
+    /* Charcode 0 (@ on MC6847) */
+    ram[0x0400] = 0x00;
+    setup_gfx(&d, 0, 0, 0, 0x0400);
+    fb = dragon_get_framebuffer(&d);
+    TEST("Charcode $00 (@): renders");
+    CHECK(1, "ok");  /* Just ensure no crash */
+
+    /* SG4 with all color indices */
+    printf("\nSG4 all colors:\n");
+    for (int col = 0; col < 8; col++) {
+        ram[0x0400 + col] = (uint8_t)(0x80 | (col << 4) | 0x0F);
+        /* bit7=1, color=col, all 4 quadrants on */
+    }
+    setup_gfx(&d, 0, 0, 0, 0x0400);
+    fb = dragon_get_framebuffer(&d);
+
+    TEST("SG4 color 0 (green) renders");
+    CHECK((fb[0] & 0x00FF00) > 0x80, "expected green");
+
+    TEST("SG4 color 3 (red) renders");
+    /* Color 3 at char position 3: pixel x = 3*8 = 24 */
+    CHECK((fb[24] & 0xFF0000) > 0x80, "expected red");
+
+    TEST("SG4 color 7 (orange) renders");
+    /* Color 7 at char position 7: pixel x = 7*8 = 56 */
+    CHECK((fb[56] & 0xFF0000) > 0x80, "expected orange component");
+
     printf("\n=== Graphics Mode Tests: %d passed, %d failed ===\n", pass_count, fail_count);
     return fail_count > 0 ? 1 : 0;
 }

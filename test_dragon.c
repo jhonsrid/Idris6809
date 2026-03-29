@@ -1,6 +1,7 @@
 #include "dragon.h"
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -252,6 +253,115 @@ int main(void)
 
     TEST("CPU_HZ is ~889 kHz (PAL)");
     CHECK(DRAGON_CPU_HZ > 885000 && DRAGON_CPU_HZ < 892000, "out of range");
+
+    /* --- 12: Cartridge auto-start (FIRQ delay) --- */
+    printf("\nCartridge auto-start:\n");
+    {
+        /* Create a cartridge without $12 signature at $C000 (triggers FIRQ path) */
+        const char *cart_path = "/tmp/idris6809_test_cart_firq.rom";
+        FILE *cf = fopen(cart_path, "wb");
+        uint8_t cart[0x2000];
+        memset(cart, 0x00, sizeof(cart));
+        cart[0] = 0x7E;  /* JMP instruction, NOT $12 signature */
+        cart[1] = 0xC0;
+        cart[2] = 0x03;  /* JMP $C003 -> loop */
+        cart[3] = 0x7E;
+        cart[4] = 0xC0;
+        cart[5] = 0x03;
+        fwrite(cart, 1, sizeof(cart), cf);
+        fclose(cf);
+
+        dragon_init(&d);
+        dragon_load_rom("ROMS/d32.rom");
+        mem_load_cartridge(cart_path);
+        dragon_reset(&d);
+
+        TEST("Cartridge without $12: cart_firq_delay = 120");
+        CHECK(d.cart_firq_delay == 120, "expected 120");
+
+        TEST("EXEC address set to $C000");
+        uint8_t *cram = mem_get_ram();
+        CHECK(cram[0x72] == 0xC0 && cram[0x73] == 0x00, "expected $C000");
+
+        /* Run 119 frames — delay should not have fired yet */
+        for (int i = 0; i < 119; i++)
+            dragon_run_frame(&d);
+
+        TEST("After 119 frames: cart_firq_delay = 1");
+        CHECK(d.cart_firq_delay == 1, "expected 1");
+
+        /* PIA1 CB1 IRQ1 flag should NOT be set yet */
+        TEST("After 119 frames: PIA1 CB1 not yet triggered");
+        CHECK(!(d.pia1.crb & PIA_CR_IRQ1_FLAG), "expected no flag yet");
+
+        /* Frame 120: FIRQ should fire */
+        dragon_run_frame(&d);
+
+        TEST("After 120 frames: cart_firq_delay = 0");
+        CHECK(d.cart_firq_delay == 0, "expected 0");
+
+        TEST("After 120 frames: PIA1 CB1 triggered (CART FIRQ)");
+        CHECK(d.pia1.crb & PIA_CR_IRQ1_FLAG, "expected IRQ1 flag in PIA1 CRB");
+
+        /* Extra frame should not re-trigger */
+        d.pia1.crb &= ~PIA_CR_IRQ1_FLAG;  /* clear manually */
+        dragon_run_frame(&d);
+        TEST("Frame 121: no re-trigger");
+        CHECK(!(d.pia1.crb & PIA_CR_IRQ1_FLAG), "should not re-fire");
+
+        mem_eject_cartridge();
+        unlink(cart_path);
+    }
+
+    /* Cartridge WITH $12 signature: no FIRQ delay */
+    {
+        const char *cart_path = "/tmp/idris6809_test_cart_sig.rom";
+        FILE *cf = fopen(cart_path, "wb");
+        uint8_t cart[0x2000];
+        memset(cart, 0x00, sizeof(cart));
+        cart[0] = 0x12;  /* Signature byte — BASIC auto-starts via JMP */
+        fwrite(cart, 1, sizeof(cart), cf);
+        fclose(cf);
+
+        dragon_init(&d);
+        dragon_load_rom("ROMS/d32.rom");
+        mem_load_cartridge(cart_path);
+        dragon_reset(&d);
+
+        TEST("Cartridge with $12 signature: cart_firq_delay = 0");
+        CHECK(d.cart_firq_delay == 0, "expected 0");
+
+        mem_eject_cartridge();
+        unlink(cart_path);
+    }
+
+    /* No cartridge: no delay */
+    {
+        dragon_init(&d);
+        dragon_load_rom("ROMS/d32.rom");
+        dragon_reset(&d);
+
+        TEST("No cartridge: cart_firq_delay = 0");
+        CHECK(d.cart_firq_delay == 0, "expected 0");
+    }
+
+    /* --- 13: dragon_end_frame() directly --- */
+    printf("\ndragon_end_frame() direct:\n");
+    {
+        dragon_init(&d);
+        dragon_load_rom("ROMS/d32.rom");
+        dragon_reset(&d);
+
+        int fc_before = d.frame_count;
+        dragon_end_frame(&d);
+        TEST("dragon_end_frame increments frame_count");
+        CHECK(d.frame_count == fc_before + 1, "expected increment");
+
+        dragon_end_frame(&d);
+        dragon_end_frame(&d);
+        TEST("Multiple calls increment correctly");
+        CHECK(d.frame_count == fc_before + 3, "expected +3");
+    }
 
     /* --- Summary --- */
     printf("\n=== Dragon 32 Machine Tests: %d passed, %d failed ===\n",

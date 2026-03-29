@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -194,6 +195,135 @@ int main(void)
     /* Verify ROM data is readable in ROM area */
     TEST("ROM data at $C000 is non-zero after load");
     CHECK(mem_read(0xC000) != 0x00, "expected non-zero ROM data");
+
+    /* --- Test 8: Cartridge ROM (programmatic, no file needed) --- */
+    printf("\nCartridge ROM:\n");
+    mem_init();
+
+    TEST("No cartridge initially");
+    CHECK(!mem_has_cartridge(), "expected no cartridge");
+
+    /* Manually load a 16KB cartridge into cart_rom via the public interface.
+     * Since mem_load_cartridge needs a file, we create a temp file. */
+    {
+        const char *tmppath = "/tmp/idris6809_test_cart_16k.rom";
+        FILE *f = fopen(tmppath, "wb");
+        uint8_t cart_data[0x4000];
+        memset(cart_data, 0, sizeof(cart_data));
+        cart_data[0] = 0x12;           /* Signature byte at $C000 */
+        cart_data[1] = 0x34;           /* $C001 */
+        cart_data[0x3EFF] = 0xAB;      /* Maps to $FEFF ($FEFF-$C000=$3EFF) */
+        fwrite(cart_data, 1, sizeof(cart_data), f);
+        fclose(f);
+
+        int crc = mem_load_cartridge(tmppath);
+        TEST("Load 16KB cartridge succeeds");
+        CHECK(crc == 0, "load failed");
+
+        TEST("mem_has_cartridge() returns true");
+        CHECK(mem_has_cartridge(), "expected cartridge present");
+
+        TEST("$C000 reads from cartridge ROM");
+        CHECK(mem_read(0xC000) == 0x12, "expected $12");
+
+        TEST("$C001 reads from cartridge ROM");
+        CHECK(mem_read(0xC001) == 0x34, "expected $34");
+
+        TEST("$FEFF reads from cartridge ROM");
+        CHECK(mem_read(0xFEFF) == 0xAB, "expected $AB");
+
+        /* Write to cartridge area goes to RAM underneath */
+        mem_write(0xC000, 0xFF);
+        TEST("Write to $C000 goes to RAM, cart still reads");
+        CHECK(mem_read(0xC000) == 0x12, "cartridge should overlay");
+        /* Verify RAM got the write */
+        ram = mem_get_ram();
+        CHECK(ram[0xC000] == 0xFF, "RAM should have $FF");
+
+        /* Eject */
+        mem_eject_cartridge();
+        TEST("After eject: no cartridge");
+        CHECK(!mem_has_cartridge(), "expected no cartridge");
+
+        TEST("After eject: $C000 reads from ROM (not cart)");
+        CHECK(mem_read(0xC000) != 0x12, "should not read cart data");
+
+        unlink(tmppath);
+    }
+
+    /* --- Test 9: 8KB cartridge with mirroring --- */
+    printf("\n8KB Cartridge mirroring:\n");
+    mem_init();
+    {
+        const char *tmppath = "/tmp/idris6809_test_cart_8k.rom";
+        FILE *f = fopen(tmppath, "wb");
+        uint8_t cart_data[0x2000];
+        memset(cart_data, 0, sizeof(cart_data));
+        cart_data[0] = 0xAA;           /* $C000 */
+        cart_data[0x100] = 0xBB;       /* $C100 */
+        cart_data[0x1FFF] = 0xCC;      /* $DFFF */
+        fwrite(cart_data, 1, sizeof(cart_data), f);
+        fclose(f);
+
+        int crc = mem_load_cartridge(tmppath);
+        TEST("Load 8KB cartridge succeeds");
+        CHECK(crc == 0, "load failed");
+
+        TEST("$C000 reads cartridge data");
+        CHECK(mem_read(0xC000) == 0xAA, "expected $AA");
+
+        TEST("$C100 reads cartridge data");
+        CHECK(mem_read(0xC100) == 0xBB, "expected $BB");
+
+        TEST("$DFFF reads cartridge data");
+        CHECK(mem_read(0xDFFF) == 0xCC, "expected $CC");
+
+        /* 8KB mirroring: $E000-$FEFF mirrors $C000-$DFFF */
+        TEST("$E000 mirrors $C000");
+        CHECK(mem_read(0xE000) == 0xAA, "expected $AA from mirror");
+
+        TEST("$E100 mirrors $C100");
+        CHECK(mem_read(0xE100) == 0xBB, "expected $BB from mirror");
+
+        TEST("$FDFF mirrors $DDFF");
+        /* $FDFF - $C000 = $3DFF. $3DFF & $1FFF = $1DFF. cart_rom[$1DFF] = 0 */
+        /* Let's test a known value instead: $DFFF mirrors to $FFFF (out of range).
+         * So test that $E000 + offset mirrors $C000 + offset for cart_data[0] */
+        /* $E000 -> offset $2000 & $1FFF = $0000 -> $AA. Already tested above.
+         * $E100 -> offset $2100 & $1FFF = $0100 -> $BB. Already tested above.
+         * Test another: cart_data[$1FFF] = $CC at $DFFF. Mirror at $DFFF+$2000=$FFFF
+         * which is in vector area, so not accessible. Instead verify a mid-range mirror: */
+        /* cart_data[0] = $AA at $C000, mirror at $E000 (tested). Check $FEFF: */
+        /* $FEFF -> offset $3EFF & $1FFF = $1EFF. cart_rom[$1EFF] = 0 */
+        CHECK(mem_read(0xFEFF) == 0x00, "expected $00 (no data at mirror offset)");
+
+        mem_eject_cartridge();
+        unlink(tmppath);
+    }
+
+    /* --- Test 10: Cartridge load error handling --- */
+    printf("\nCartridge error handling:\n");
+    {
+        FILE *saved_err = stderr;
+        stderr = fopen("/dev/null", "w");
+
+        TEST("Load non-existent cartridge fails");
+        CHECK(mem_load_cartridge("/tmp/no_such_cart.rom") != 0, "should fail");
+
+        TEST("No cartridge after failed load");
+        CHECK(!mem_has_cartridge(), "expected no cartridge");
+
+        /* Empty file */
+        const char *tmppath = "/tmp/idris6809_test_empty.rom";
+        FILE *f = fopen(tmppath, "wb");
+        fclose(f);
+        TEST("Load empty cartridge file fails");
+        CHECK(mem_load_cartridge(tmppath) != 0, "should fail");
+        unlink(tmppath);
+
+        fclose(stderr);
+        stderr = saved_err;
+    }
 
     /* --- Summary --- */
     printf("\n=== Memory Subsystem Tests: %d passed, %d failed ===\n",

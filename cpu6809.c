@@ -2186,10 +2186,10 @@ static void handle_nmi(CPU6809 *cpu)
         push_entire_state(cpu);
         cpu->cycles += 19;
     } else {
-        cpu->halted = false;
-        cpu->cwai = false;
         cpu->cycles += 7;
     }
+    cpu->halted = false;
+    cpu->cwai = false;
     cpu->cc |= CC_I | CC_F;
     cpu->pc = read_word(0xFFFC);
     cpu->nmi_pending = false;
@@ -2203,10 +2203,10 @@ static void handle_firq(CPU6809 *cpu)
         push_byte(cpu, &cpu->s, cpu->cc);
         cpu->cycles += 10;
     } else {
-        cpu->halted = false;
-        cpu->cwai = false;
         cpu->cycles += 7;
     }
+    cpu->halted = false;
+    cpu->cwai = false;
     cpu->cc |= CC_I | CC_F;
     cpu->pc = read_word(0xFFF6);
 }
@@ -2218,10 +2218,10 @@ static void handle_irq(CPU6809 *cpu)
         push_entire_state(cpu);
         cpu->cycles += 19;
     } else {
-        cpu->halted = false;
-        cpu->cwai = false;
         cpu->cycles += 7;
     }
+    cpu->halted = false;
+    cpu->cwai = false;
     cpu->cc |= CC_I;
     cpu->pc = read_word(0xFFF8);
 }
@@ -2250,7 +2250,19 @@ int cpu_step(CPU6809 *cpu)
         return cpu->cycles;
     }
 
-    /* If halted (SYNC/CWAI), consume 1 cycle */
+    /* SYNC: any interrupt signal (even masked) resumes execution.
+     * Unmasked interrupts were already handled above and vectored.
+     * Masked interrupts just wake the CPU without vectoring. */
+    if (cpu->halted && !cpu->cwai) {
+        if (cpu->nmi_pending || cpu->firq_pending || cpu->irq_pending) {
+            cpu->halted = false;
+        }
+        cpu->cycles = 1;
+        cpu->total_cycles += 1;
+        return 1;
+    }
+
+    /* If halted (CWAI), consume 1 cycle */
     if (cpu->halted) {
         cpu->cycles = 1;
         cpu->total_cycles += 1;

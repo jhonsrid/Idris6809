@@ -369,6 +369,123 @@ int main(void)
     TEST("PIA1 port B read: output + input bits combined");
     CHECK(pb == 0xFB, "expected $FB");
 
+    /* --- 15: CA2 as input with edge detection --- */
+    printf("\nCA2 interrupt (input mode):\n");
+    pia_init(&pia);
+
+    /* CRA: CA2 input (bit5=0), falling edge (bit4=0), IRQ2 enable (bit3=1),
+     * data mode (bit2=1), CA1 falling (bit1=0), CA1 disable (bit0=0)
+     * = 00001100 = $0C */
+    pia_write(&pia, 1, 0x0C);
+
+    TEST("CA2 falling edge: sets IRQ2 flag");
+    irq = pia_set_ca2(&pia, false);  /* falling edge */
+    CHECK(pia.cra & PIA_CR_IRQ2_FLAG, "expected IRQ2 flag");
+    CHECK(irq, "expected IRQ signalled");
+
+    /* Rising edge should NOT trigger when configured for falling */
+    pia.cra &= ~PIA_CR_IRQ2_FLAG;
+    irq = pia_set_ca2(&pia, true);
+    TEST("CA2 rising edge: no effect when configured for falling");
+    CHECK(!(pia.cra & PIA_CR_IRQ2_FLAG), "expected no flag");
+    CHECK(!irq, "expected no IRQ");
+
+    /* Switch to rising edge: bit4=1, bit3=1 -> $1C */
+    pia_write(&pia, 1, 0x1C);
+    irq = pia_set_ca2(&pia, true);
+    TEST("CA2 rising edge: sets IRQ2 flag when configured for rising");
+    CHECK(pia.cra & PIA_CR_IRQ2_FLAG, "expected IRQ2 flag");
+    CHECK(irq, "expected IRQ");
+
+    /* CA2 IRQ2 disabled (bit3=0) */
+    pia_init(&pia);
+    pia_write(&pia, 1, 0x04);  /* CA2 input, falling, IRQ2 disabled, data mode */
+    irq = pia_set_ca2(&pia, false);
+    TEST("CA2 with IRQ2 disabled: flag set but no IRQ output");
+    CHECK(pia.cra & PIA_CR_IRQ2_FLAG, "expected flag set");
+    CHECK(!irq, "expected no IRQ signalled");
+
+    /* Verify pia_irq_a reflects CA2 IRQ2 */
+    pia_init(&pia);
+    pia_write(&pia, 1, 0x0C);  /* CA2 input, falling, IRQ2 enable */
+    pia_set_ca2(&pia, false);
+    TEST("pia_irq_a() true from CA2 IRQ2");
+    CHECK(pia_irq_a(&pia), "expected IRQA");
+
+    /* IRQ2 flag cleared on data register A read */
+    pia_read(&pia, 0);
+    TEST("CA2 IRQ2 flag cleared on data register A read");
+    CHECK(!(pia.cra & PIA_CR_IRQ2_FLAG), "expected flag cleared");
+
+    /* --- 16: CB2 as input with edge detection --- */
+    printf("\nCB2 interrupt (input mode):\n");
+    pia_init(&pia);
+
+    /* CRB: CB2 input, falling, IRQ2 enable, data mode = $0C */
+    pia_write(&pia, 3, 0x0C);
+
+    firq = pia_set_cb2(&pia, false);
+    TEST("CB2 falling edge: sets IRQ2 flag in CRB");
+    CHECK(pia.crb & PIA_CR_IRQ2_FLAG, "expected IRQ2 flag");
+    CHECK(firq, "expected IRQ");
+
+    pia.crb &= ~PIA_CR_IRQ2_FLAG;
+    firq = pia_set_cb2(&pia, true);
+    TEST("CB2 rising edge: no effect when configured for falling");
+    CHECK(!(pia.crb & PIA_CR_IRQ2_FLAG), "expected no flag");
+
+    /* Rising edge config */
+    pia_write(&pia, 3, 0x1C);
+    firq = pia_set_cb2(&pia, true);
+    TEST("CB2 rising edge: sets flag when configured for rising");
+    CHECK(pia.crb & PIA_CR_IRQ2_FLAG, "expected flag");
+
+    /* Verify pia_irq_b reflects CB2 */
+    pia_init(&pia);
+    pia_write(&pia, 3, 0x0C);
+    pia_set_cb2(&pia, false);
+    TEST("pia_irq_b() true from CB2 IRQ2");
+    CHECK(pia_irq_b(&pia), "expected IRQB");
+
+    /* IRQ2 cleared on data register B read */
+    pia_read(&pia, 2);
+    TEST("CB2 IRQ2 flag cleared on data register B read");
+    CHECK(!(pia.crb & PIA_CR_IRQ2_FLAG), "expected flag cleared");
+
+    /* --- 17: CA2 as output (bit5=1): set_ca2 should be ignored --- */
+    printf("\nCA2/CB2 output mode:\n");
+    pia_init(&pia);
+    pia_write(&pia, 1, 0x34);  /* CA2 output (bit5=1), data mode */
+    irq = pia_set_ca2(&pia, false);
+    TEST("CA2 output mode: set_ca2 returns false");
+    CHECK(!irq, "expected no IRQ");
+    CHECK(!(pia.cra & PIA_CR_IRQ2_FLAG), "expected no flag set");
+
+    pia_init(&pia);
+    pia_write(&pia, 3, 0x34);  /* CB2 output */
+    firq = pia_set_cb2(&pia, false);
+    TEST("CB2 output mode: set_cb2 returns false");
+    CHECK(!firq, "expected no IRQ");
+    CHECK(!(pia.crb & PIA_CR_IRQ2_FLAG), "expected no flag");
+
+    /* --- 18: Simultaneous CA1 and CA2 interrupts --- */
+    printf("\nSimultaneous CA1+CA2 interrupts:\n");
+    pia_init(&pia);
+    /* Enable both CA1 and CA2 IRQs: falling edge for both */
+    pia_write(&pia, 1, 0x0D);  /* CA2: input/falling/enable (bits 5-3=001), data(bit2=1), CA1 falling(bit1=0), CA1 enable(bit0=1) */
+    pia_set_ca1(&pia, false);
+    pia_set_ca2(&pia, false);
+    TEST("Both CA1 and CA2 set IRQ flags");
+    CHECK((pia.cra & PIA_CR_IRQ1_FLAG) && (pia.cra & PIA_CR_IRQ2_FLAG),
+          "both flags should be set");
+    CHECK(pia_irq_a(&pia), "IRQA should be active");
+
+    /* Reading data register clears both */
+    pia_read(&pia, 0);
+    TEST("Reading data A clears both IRQ1 and IRQ2 flags");
+    CHECK(!(pia.cra & PIA_CR_IRQ1_FLAG) && !(pia.cra & PIA_CR_IRQ2_FLAG),
+          "both flags should be cleared");
+
     /* --- Summary --- */
     printf("\n=== PIA (MC6821) Tests: %d passed, %d failed ===\n",
            tests_passed, tests_failed);
