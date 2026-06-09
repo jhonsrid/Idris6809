@@ -40,7 +40,7 @@ typedef struct {
 
     /* Byte/bit position in the stream */
     size_t    byte_pos;
-    int       bit_pos;       /* 7=MSB down to 0=LSB */
+    int       bit_pos;       /* 0=LSB up to 7=MSB */
 
     /* Waveform state for current bit */
     double    halfcycle_len;     /* CPU cycles per half-cycle (fractional) */
